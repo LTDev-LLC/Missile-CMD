@@ -70,6 +70,7 @@ For example, the top bar might show `W10 012450 H25000 A09`, and the bottom bar 
 
 - Sound and vibration
 - Slow, Normal, or Fast cursor movement
+- **Controls → Resume timer:** a three-second countdown before every round starts or play resumes (on by default)
 - Adaptive rendering (up to 30 FPS, idling when unchanged)
 - Battery Saver rendering (15 FPS cap while simulation remains 30 Hz)
 - **Display → Invert colors:** swap foreground and background throughout the app; the preference is saved (off by default)
@@ -111,8 +112,9 @@ Connect the device, review the firmware compatibility, then choose **Install Mis
 The installer copies the app and matching help file (when that release includes one),
 checks both on the microSD card, and releases USB. Open **Apps → Games → Missile CMD**.
 Each release uses `apps_data/missile_cmd/<VERSION>/` for its help, settings, saves,
-scores, profile, and pace history. Existing data stays in its original folder;
-installing a different release starts with that release's own saved data or defaults.
+scores, profile, and pace history. On startup, **Migrate** imports missing files from the
+newest older version containing user data, then prunes older version folders. Existing
+files in the current release take priority; its matching help file is preserved.
 
 Older releases without help remain installable as app-only releases. Their FAP API is
 shown, but firmware versions are marked unrecorded rather than inferred from the current
@@ -138,8 +140,24 @@ Standalone firmware-specific FAPs remain available; `missile_cmd.fap` is the Off
 
 The build generates the app version and data paths from `VERSION`; there is no separate
 data-directory version setting. Help is generated locally as `dist/<VERSION>/help.bin`.
-The app can offer to purge other SemVer release folders and legacy numeric folders at
-startup. Choose **Keep** to retain them; the active release's folder is always excluded.
+At startup, choose **Keep**, **Migrate**, or **Purge** when other version folders exist:
+
+- **Keep** leaves those folders untouched and uses this release's saved data or defaults.
+- **Migrate** selects the newest older SemVer release with user data (legacy `vN` folders
+  are a fallback). It copies missing settings, all save slots, scores, profile, pace history,
+  backups, and other files, including nested folders. Releases containing only help are
+  skipped as sources. Existing current-version files win conflicts; old help files are
+  excluded. Each copied file is synced and read back before publication, and settings,
+  scores, profile, and all saves are checked with the current readers before pruning starts.
+  Copy or compatibility failures retain the old folders and offer **Retry** or **Keep**.
+  Interrupted copies can be retried on the next launch. Only versions older than the current
+  release are pruned, with the migration source removed last.
+- **Purge** deletes all listed other SemVer and legacy version folders without importing
+  their contents. The current release's folder is always excluded.
+
+Version selection uses SemVer precedence, with a deterministic name ordering for equal
+versions with different build metadata. Equivalent or newer releases are not migration
+sources and are retained by **Migrate**.
 
 ### Build and install
 

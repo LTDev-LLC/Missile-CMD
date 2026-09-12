@@ -785,7 +785,10 @@ static __attribute__((noinline)) void mc_handle_screen_input(McApp* app, const I
     }
     switch(app->ui.screen) {
     case McScreenCleanup:
-        if(app->ui.cleanup_state == McCleanupScanning || app->ui.cleanup_state == McCleanupPurging)
+        if(app->ui.cleanup_state == McCleanupScanning ||
+           app->ui.cleanup_state == McCleanupPurging ||
+           app->ui.cleanup_state == McCleanupMigrating ||
+           app->ui.cleanup_state == McCleanupValidating)
             break;
         if(mc_is_back_event(event) || mc_is_long_back_event(event))
             app->cleanup_action = 1U;
@@ -793,11 +796,16 @@ static __attribute__((noinline)) void mc_handle_screen_input(McApp* app, const I
             if(event->key == InputKeyUp || event->key == InputKeyDown)
                 mc_app_cleanup_select(app, event->key == InputKeyDown);
             else
-                app->ui.menu_index = event->key == InputKeyRight ? 1U : 0U;
+                app->ui.menu_index = mc_wrap_step(
+                    app->ui.menu_index,
+                    app->ui.cleanup_can_migrate && app->ui.cleanup_state == McCleanupPrompt ? 3U :
+                                                                                              2U,
+                    event->key == InputKeyRight);
         } else if(mc_is_confirm_event(event))
-            app->cleanup_action = !app->ui.menu_index                      ? 1U :
-                                  app->ui.cleanup_state == McCleanupFailed ? 3U :
-                                                                             2U;
+            app->cleanup_action = !app->ui.menu_index                                     ? 1U :
+                                  app->ui.cleanup_state == McCleanupFailed                ? 3U :
+                                  app->ui.cleanup_can_migrate && app->ui.menu_index == 1U ? 4U :
+                                                                                            2U;
         break;
     case McScreenPracticeSetup:
     case McScreenSettingsGroups:
@@ -893,6 +901,10 @@ static __attribute__((noinline)) void mc_handle_screen_input(McApp* app, const I
 }
 
 void mc_app_handle_input(McApp* app, const InputEvent* event) {
+    const McScreen previous_screen = app->ui.screen;
     mc_handle_screen_input(app, event);
+    // Every entry into play, including cancelled dialogs and new waves, gets ready time.
+    if(previous_screen != McScreenPlaying && app->ui.screen == McScreenPlaying)
+        mc_app_continue(app);
     mc_help_refresh(&app->ui.common, &app->ui.game);
 }

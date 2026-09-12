@@ -63,6 +63,24 @@ void mc_storage_worker_execute(McStorageWorker* w) {
     case McIoCleanupInit:
     case McIoCleanupStep: {
         McCleanup* c = w->cleanup;
+        if(c->state == McCleanupValidating && j->operation == McIoCleanupStep &&
+           !j->data.cleanup.action) {
+            // Borrow the job union for codec outputs; do not allocate a second game on the stack.
+            const McCleanupReply reply = j->data.cleanup;
+            McStorageResult result;
+            if(c->validation == 0U)
+                result = mc_persistence_load_settings(p, &j->data.settings);
+            else if(c->validation == 1U)
+                result = mc_persistence_load_scores(p, &j->data.scores);
+            else if(c->validation == 2U)
+                result = mc_persistence_load_profile(p, &j->data.profile);
+            else {
+                p->slot = c->validation - 3U;
+                result = mc_persistence_restore(p, &run);
+            }
+            j->data.cleanup = reply;
+            mc_cleanup_validated(c, result);
+        }
         McCleanupReply* r = &j->data.cleanup;
         r->requested_index = r->index;
         r->requested_offset = r->offset;
@@ -70,12 +88,17 @@ void mc_storage_worker_execute(McStorageWorker* w) {
         if(r->action == 1U) mc_cleanup_deinit(c);
         if(r->action == 2U) mc_cleanup_approve(c);
         if(r->action == 3U) mc_cleanup_retry(c);
+        if(r->action == 4U) mc_cleanup_migrate(c);
         if(r->action != 1U) mc_cleanup_step(c);
+        if(r->action != 1U) mc_cleanup_migration_step(c, p->scratch);
         r->state = r->action == 1U ? McCleanupDone : c->state;
         r->count = c->count;
         r->remaining = c->remaining;
         r->approved = c->approved;
         r->limited = c->limited;
+        r->can_migrate = c->source != NULL;
+        r->migrating = c->migrating;
+        snprintf(r->source, sizeof(r->source), "%.40s", c->source ? c->source->name : "");
         if(r->count)
             r->index %= r->count;
         else
@@ -84,7 +107,7 @@ void mc_storage_worker_execute(McStorageWorker* w) {
         r->length = strlen(name);
         if(r->offset >= r->length) r->offset = r->length ? ((r->length - 1U) / 40U) * 40U : 0U;
         snprintf(r->name, sizeof(r->name), "%.40s", name + r->offset);
-        j->result = r->state == McCleanupFailed ? McStorageIoError : McStorageOk;
+        j->result = r->state == McCleanupFailed ? c->result : McStorageOk;
         if(r->state == McCleanupDone) mc_cleanup_deinit(c);
         break;
     }

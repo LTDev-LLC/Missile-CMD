@@ -4,10 +4,12 @@ size_t cleanup_count, cleanup_remaining, cleanup_index;
 uint16_t cleanup_offset, cleanup_length;
 // Cleanup and help screens are mutually exclusive. Snapshots own their copy.
 union {
-    char cleanup_name[41];
+    struct {
+        char cleanup_name[41], cleanup_source[41];
+    };
     McHelpPage help;
 };
-bool cleanup_approved, cleanup_limited;
+bool cleanup_approved, cleanup_limited, cleanup_can_migrate, cleanup_migrating;
 McSettings settings;
 McScreen screen;
 McScreen settings_return_screen;

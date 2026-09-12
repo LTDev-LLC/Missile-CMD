@@ -82,6 +82,20 @@ static void capture_pages(const char* output) {
     capture(output, "settings", &app, McScreenSettings);
 
     prepare(&app);
+    app.ui.cleanup_state = McCleanupPrompt;
+    app.ui.cleanup_can_migrate = true;
+    app.ui.cleanup_count = 3;
+    app.ui.menu_index = 1;
+    strcpy(app.ui.cleanup_source, "0.9.0+build.2");
+    capture(output, "migration", &app, McScreenCleanup);
+    app.ui.cleanup_state = McCleanupMigrating;
+    app.ui.cleanup_migrating = true;
+    capture(output, "migration_progress", &app, McScreenCleanup);
+    app.ui.cleanup_state = McCleanupFailed;
+    app.ui.storage_result = McStorageInvalid;
+    capture(output, "migration_failed", &app, McScreenCleanup);
+
+    prepare(&app);
     app.ui.settings_group = 1U;
     app.ui.menu_index = McSettingsItemInvertColors;
     app.ui.settings.invert_colors = true;

@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
     assert(fixture);
     McSettings settings;
     mc_settings_defaults(&settings);
+    settings.resume_countdown = false; // Preserve the preference encoded in the old fixture.
     settings.last_setup_valid = true;
     settings.last_mode = McModePractice;
     settings.last_seed = 0x89ABCDEFU;

@@ -39,8 +39,9 @@ typedef struct {
     uint16_t offset, length, requested_offset;
     uint8_t action;
     McCleanupState state;
-    bool approved, limited;
+    bool approved, limited, can_migrate, migrating;
     char name[41];
+    char source[41];
 } McCleanupReply;
 typedef struct {
     McIoOperation operation;

@@ -98,6 +98,111 @@ static void send(McApp* app, InputKey key, InputType type) {
     mc_app_handle_input(app, &event);
 }
 
+// Ready time freezes the entire game and ignores play input without restarting the timer.
+static void finish_countdown(McApp* app) {
+    assert(app->ui.screen == McScreenPlaying);
+    const unsigned ticks = app->ui.settings.resume_countdown ? 90U : 0U;
+    assert(app->ui.countdown_ticks == ticks);
+    assert(!app->held_directions && !app->cursor_hold_ticks);
+    const McGame before = app->ui.game;
+    for(unsigned i = 0; i < ticks; i++) {
+        send(app, InputKeyOk, InputTypeShort);
+        send(app, InputKeyRight, InputTypePress);
+        send(app, InputKeyRight, InputTypeRelease);
+        mc_app_step(app);
+        assert(app->ui.countdown_ticks == ticks - i - 1U);
+    }
+    assert(!memcmp(&before, &app->ui.game, sizeof(before)));
+}
+
+static void test_countdown_play_transitions(void) {
+    for(unsigned enabled = 0; enabled < 2; enabled++) {
+        host_reset();
+        McApp* app = test_app_alloc();
+        assert(app->ui.settings.resume_countdown);
+        app->ui.settings.resume_countdown = enabled;
+        app->ui.setup_mode = McModeSeeded;
+        app->ui.setup_seed = 1234U;
+
+        // A control card delays the countdown until the player starts the round.
+        mc_app_start_new_run(app, true);
+        assert(app->ui.screen == McScreenControlCard && !app->ui.countdown_ticks);
+        send(app, InputKeyOk, InputTypeShort);
+        finish_countdown(app);
+        mc_app_step(app);
+        assert(app->ui.game.stats.play_ticks == 1U);
+        send(app, InputKeyOk, InputTypeShort);
+        assert(app->ui.game.stats.shots_fired == 1U);
+        test_io(app, 0);
+
+        // Both pause gestures and cancelling Save & Title must restart ready time.
+        send(app, InputKeyBack, InputTypeShort);
+        assert(app->ui.screen == McScreenPaused);
+        send(app, InputKeyOk, InputTypeShort);
+        mc_app_step(app);
+        send(app, InputKeyBack, InputTypeShort);
+        assert(app->ui.screen == McScreenPaused && !app->ui.countdown_ticks);
+        send(app, InputKeyBack, InputTypeShort);
+        finish_countdown(app);
+        send(app, InputKeyBack, InputTypeLong);
+        assert(app->ui.screen == McScreenConfirm);
+        send(app, InputKeyBack, InputTypeShort);
+        finish_countdown(app);
+        test_io(app, 0);
+
+        // Restoring an active save opens Pause; ready time starts on Resume.
+        mc_app_resume_run(app);
+        test_io(app, 0);
+        assert(app->ui.screen == McScreenPaused);
+        send(app, InputKeyBack, InputTypeShort);
+        finish_countdown(app);
+
+        // Cover next waves reached directly and through the workshop.
+        for(unsigned workshop = 0; workshop < 2; workshop++) {
+            app->ui.game.phase = McGamePhaseWaveResult;
+            app->ui.game.repair_credits = workshop;
+            app->ui.screen = McScreenWaveResult;
+            const uint16_t wave = app->ui.game.wave;
+            send(app, InputKeyOk, InputTypeShort);
+            if(workshop) {
+                assert(app->ui.screen == McScreenRepair);
+                send(app, InputKeyBack, InputTypeShort);
+            }
+            assert(app->ui.game.wave == wave + 1U);
+            finish_countdown(app);
+            test_io(app, 0);
+        }
+
+        // Direct starts, retries, and exact wave practice use the same countdown.
+        app->ui.settings.show_control_card = false;
+        mc_app_start_new_run(app, true);
+        finish_countdown(app);
+        test_io(app, 0);
+        mc_app_retry(app, false);
+        finish_countdown(app);
+        test_io(app, 0);
+        mc_app_practice_wave(app);
+        assert(app->ui.wave_practice);
+        finish_countdown(app);
+        mc_app_retry(app, false);
+        finish_countdown(app);
+
+        // Training starts ready time after the lesson, including subsequent lessons.
+        app->ui.setup_mode = McModeTraining;
+        mc_app_start_new_run(app, false);
+        assert(app->ui.screen == McScreenLesson && !app->ui.countdown_ticks);
+        send(app, InputKeyOk, InputTypeShort);
+        finish_countdown(app);
+        app->ui.game.phase = McGamePhaseWaveResult;
+        app->ui.screen = McScreenWaveResult;
+        send(app, InputKeyOk, InputTypeShort);
+        assert(app->ui.screen == McScreenLesson && !app->ui.countdown_ticks);
+        send(app, InputKeyOk, InputTypeShort);
+        finish_countdown(app);
+        mc_app_free(app);
+    }
+}
+
 // Drain pace maintenance within a fixed step bound and require successful completion
 static void history(McPersistence* p) {
     McStorageResult r = McStorageBusy;
@@ -190,6 +295,7 @@ static void test_ui_and_save_resume(void) {
     assert(app->ui.screen == McScreenLesson);
     send(app, InputKeyOk, InputTypeShort);
     assert(app->ui.screen == McScreenPlaying);
+    finish_countdown(app);
     const uint32_t shots = app->ui.game.stats.shots_fired;
     send(app, InputKeyOk, InputTypeLong);
     send(app, InputKeyRight, InputTypePress);
@@ -209,10 +315,12 @@ static void test_ui_and_save_resume(void) {
     send(app, InputKeyOk, InputTypeRelease);
     assert(!app->ui.battery_overlay && app->ui.game.stats.shots_fired == shots + 1U);
     app->ui.game = before_selection;
+    test_io(app, furi_get_tick());
     app->ui.setup_mode = McModeSeeded;
     app->ui.setup_seed = 99U;
     mc_app_start_new_run(app, false);
     test_io(app, furi_get_tick());
+    finish_countdown(app);
     send(app, InputKeyOk, InputTypeShort);
     for(uint8_t i = 0U; i < 40U; i++)
         mc_app_step(app);
@@ -257,9 +365,11 @@ static void test_real_application_loop(void) {
         {11005U, InputKeyBack, InputTypeShort}, {11006U, InputKeyBack, InputTypeLong},
         {11007U, InputKeyOk, InputTypeShort},   {11008U, InputKeyBack, InputTypeShort},
     };
-    // Leave startup time before the first input so the script reaches interactive screens
-    for(size_t i = 0U; i < sizeof(script) / sizeof(script[0]); i++)
-        script[i].tick += 100U;
+    // Leave startup time and three seconds for ready time at each entry into play.
+    for(size_t i = 0U; i < sizeof(script) / sizeof(script[0]); i++) {
+        const uint32_t tick = script[i].tick;
+        script[i].tick += 100U + (tick >= 6U ? 3000U : 0U) + (tick >= 11005U ? 3000U : 0U);
+    }
     uint32_t redraws[2];
     for(uint8_t mode = 0; mode < McRenderModeCount; mode++) {
         host_reset();
@@ -506,6 +616,37 @@ static void test_invert_setting_survives_restart(void) {
         app = test_app_alloc();
         assert(app->ui.settings.invert_colors == !pass);
     }
+    mc_app_free(app);
+}
+
+static void test_resume_timer_setting_survives_restart(void) {
+    host_reset();
+    McApp* app = test_app_alloc();
+    assert(app->ui.settings.resume_countdown);
+    for(unsigned pass = 0; pass < 2; pass++) {
+        mc_app_open_settings(app, McScreenTitle);
+        send(app, InputKeyOk, InputTypeShort);
+        assert(app->ui.settings_group == 0U);
+        for(unsigned row = 0; app->ui.menu_index != McSettingsItemCountdown; row++) {
+            assert(row < mc_settings_group_count(0U));
+            send(app, InputKeyDown, InputTypePress);
+        }
+        assert(!strcmp(mc_setting_label(McSettingsItemCountdown), "Resume timer"));
+        send(app, pass ? InputKeyRight : InputKeyOk, pass ? InputTypePress : InputTypeShort);
+        assert(app->ui.settings.resume_countdown == (bool)pass && app->settings_dirty);
+        assert(!strcmp(
+            mc_setting_value(&app->ui.common, McSettingsItemCountdown), pass ? "On" : "Off"));
+        send(app, InputKeyBack, InputTypeShort);
+        test_io(app, 0);
+        assert(!app->settings_dirty);
+        mc_app_free(app);
+        app = test_app_alloc();
+        assert(app->ui.settings.resume_countdown == (bool)pass);
+    }
+    app->ui.settings.resume_countdown = false;
+    mc_app_confirm(app, McConfirmResetSettings, McScreenSettings);
+    send(app, InputKeyOk, InputTypeShort);
+    assert(app->ui.settings.resume_countdown);
     mc_app_free(app);
 }
 
@@ -1206,6 +1347,8 @@ static void test_checkpoint_boundaries(void) {
 }
 
 int main(void) {
+    test_countdown_play_transitions();
+    test_resume_timer_setting_survives_restart();
     test_simple_page_events();
     test_checkpoint_boundaries();
     test_retry_all_modes();

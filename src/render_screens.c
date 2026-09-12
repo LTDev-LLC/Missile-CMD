@@ -731,29 +731,51 @@ static __attribute__((noinline)) void
 }
 
 static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
-    mc_render_heading(canvas, 1, "OTHER VERSION DATA");
+    mc_render_heading(canvas, 1, "VERSION DATA");
     if(model->cleanup_state == McCleanupScanning) {
         mc_render_centered(canvas, 27, "Checking data folders...");
         return;
     }
     if(model->cleanup_state == McCleanupPurging) {
-        mc_render_centered(canvas, 23, "Deleting approved folders");
-        mc_render_printf(
+        mc_render_centered(
             canvas,
-            37,
-            "%lu of %lu remaining",
-            (unsigned long)model->cleanup_remaining,
-            (unsigned long)model->cleanup_count);
+            23,
+            model->cleanup_migrating ? "Pruning older folders" : "Deleting approved folders");
+        mc_render_printf(
+            canvas, 37, "%lu folders remaining", (unsigned long)model->cleanup_remaining);
         return;
     }
+    if(model->cleanup_state == McCleanupMigrating || model->cleanup_state == McCleanupValidating) {
+        mc_render_centered(
+            canvas,
+            23,
+            model->cleanup_state == McCleanupMigrating ? "Copying and verifying..." :
+                                                         "Checking settings / saves");
+        mc_render_centered(canvas, 37, "Old data kept until ready");
+        return;
+    }
+    const bool migrate = model->cleanup_can_migrate && model->cleanup_state == McCleanupPrompt;
     if(model->cleanup_state == McCleanupFailed) {
         mc_render_centered(
-            canvas, 17, model->cleanup_approved ? "Cleanup incomplete" : "Folder scan failed");
+            canvas,
+            17,
+            model->cleanup_migrating ? "Migration incomplete" :
+            model->cleanup_approved  ? "Cleanup incomplete" :
+                                       "Folder scan failed");
         mc_render_centered(
             canvas,
             29,
-            model->cleanup_limited ? "Too many folders; choose Keep" :
-                                     "Check SD card; retry or keep");
+            model->storage_result == McStorageInvalid ? "Unreadable settings / saves" :
+            model->cleanup_limited                    ? "Too many folders; choose Keep" :
+                                                        "Check SD card; retry or keep");
+        if(model->cleanup_migrating && model->storage_result == McStorageInvalid)
+            mc_render_centered(canvas, 37, "Older folders kept");
+    } else if(migrate && model->menu_index == 1U) {
+        mc_render_centered(canvas, 13, "From newest older data:");
+        mc_render_printf(canvas, 21, "%.20s", model->cleanup_source);
+        if(strlen(model->cleanup_source) > 20U)
+            mc_render_centered(canvas, 29, model->cleanup_source + 20U);
+        mc_render_centered(canvas, 37, "Copy missing; prune old");
     } else {
         mc_render_printf(
             canvas,
@@ -765,16 +787,21 @@ static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
         mc_render_printf(canvas, 21, "%.20s", model->cleanup_name);
         if(strlen(model->cleanup_name) > 20U)
             mc_render_centered(canvas, 29, model->cleanup_name + 20U);
-        mc_render_centered(canvas, 37, "Permanently delete all?");
+        mc_render_centered(
+            canvas,
+            37,
+            model->menu_index ? "Permanently delete all?" : "Keep all version folders");
     }
-    mc_render_menu_item(canvas, 10, 54, 50, "Keep", model->menu_index == 0U);
+    mc_render_menu_item(
+        canvas, migrate ? 1 : 10, 54, migrate ? 34 : 50, "Keep", model->menu_index == 0U);
+    if(migrate) mc_render_menu_item(canvas, 37, 54, 50, "Migrate", model->menu_index == 1U);
     mc_render_menu_item(
         canvas,
-        68,
+        migrate ? 89 : 68,
         54,
-        50,
+        migrate ? 38 : 50,
         model->cleanup_state == McCleanupFailed ? "Retry" : "Purge",
-        model->menu_index == 1U);
+        model->menu_index == (migrate ? 2U : 1U));
     mc_render_centered(canvas, 57, "Up/Down View  Back Keep");
 }
 

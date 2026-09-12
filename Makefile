@@ -32,6 +32,8 @@ test:
 	./build/test_core
 	$(CC) $(TEST_FLAGS) tests/test_compatibility.c $(CORE_SOURCES) -o build/test_compatibility
 	./build/test_compatibility tests/fixtures/pre-sharing.bin
+	$(CC) $(TEST_FLAGS) -Itests/stubs tests/test_migration.c tests/host_platform.c tests/host_canvas.c $(CORE_SOURCES) $(UI_SOURCES) -o build/test_migration
+	./build/test_migration
 	$(CC) $(TEST_FLAGS) -Itests/stubs tests/test_app.c tests/host_platform.c tests/host_canvas.c $(CORE_SOURCES) $(UI_SOURCES) -o build/test_app
 	./build/test_app
 	$(CC) $(TEST_FLAGS) -DMC_HOST_THREADS -pthread -Itests/stubs tests/test_threaded.c tests/host_platform.c tests/host_canvas.c $(CORE_SOURCES) $(UI_SOURCES) -o build/test_threaded

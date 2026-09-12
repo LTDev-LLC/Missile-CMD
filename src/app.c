@@ -320,7 +320,7 @@ void mc_app_start_new_run(McApp* app, bool allow_control_card) {
     } else if(allow_control_card && app->ui.settings.show_control_card) {
         app->ui.screen = McScreenControlCard;
     } else {
-        app->ui.screen = McScreenPlaying;
+        mc_app_continue(app);
     }
     app->pending_changes |= McGameChangeAll;
     mc_app_refresh_render_cache(app);
@@ -648,6 +648,9 @@ static void mc_app_complete_io(McApp* app, uint32_t now) {
         app->ui.cleanup_remaining = r->remaining;
         app->ui.cleanup_approved = r->approved;
         app->ui.cleanup_limited = r->limited;
+        app->ui.cleanup_can_migrate = r->can_migrate;
+        app->ui.cleanup_migrating = r->migrating;
+        memcpy(app->ui.cleanup_source, r->source, sizeof(r->source));
         // Ignore an obsolete selection while preserving scan progress.
         if(app->ui.cleanup_index == r->requested_index &&
            app->ui.cleanup_offset == r->requested_offset) {
@@ -658,14 +661,18 @@ static void mc_app_complete_io(McApp* app, uint32_t now) {
         }
         if(r->state == McCleanupDone) {
             app->ui.help = (McHelpPage){.id = McHelpNoPage};
-            app->ui.screen = McScreenTitle;
+            app->ui.screen = McScreenLoading;
             app->ui.menu_index = 0;
-            app->pending_io |= McPendingIoHistory;
+            app->startup_step = 2U;
         } else if(r->state == McCleanupFailed) {
+            if(app->ui.menu_index > 1U) app->ui.menu_index = 1U;
             app->ui.storage_item = "Version folder cleanup";
             mc_app_apply_io_result(app, result, now);
         }
-        if(j->startup) app->startup_step = 0;
+        if(r->state != McCleanupDone) {
+            app->ui.screen = McScreenCleanup;
+            if(j->startup) app->startup_step = 0;
+        }
         return;
     }
     switch(j->operation) {
@@ -697,7 +704,8 @@ static void mc_app_complete_io(McApp* app, uint32_t now) {
             if(j->startup) {
                 mc_app_refresh_high_score(app);
                 app->ui.score_difficulty = app->ui.settings.difficulty;
-                app->ui.screen = McScreenCleanup;
+                app->ui.screen = McScreenTitle;
+                app->pending_io |= McPendingIoHistory;
             }
         }
         break;
@@ -752,7 +760,7 @@ static void mc_app_complete_io(McApp* app, uint32_t now) {
     default:
         break;
     }
-    if(j->startup) app->startup_step++;
+    if(j->startup) app->startup_step = j->operation == McIoLoadRun ? 0U : app->startup_step + 1U;
     mc_app_apply_io_result(app, result, now);
 }
 
@@ -785,12 +793,14 @@ static __attribute__((noinline)) bool mc_app_process_io(McApp* app, uint32_t now
     if(app->startup_step) {
         j->startup = app->startup_step;
         static const McIoOperation startup[] = {
-            McIoLoadSettings, McIoLoadScores, McIoLoadProfile, McIoLoadRun, McIoCleanupInit};
+            McIoCleanupInit, McIoLoadSettings, McIoLoadScores, McIoLoadProfile, McIoLoadRun};
         j->operation = startup[app->startup_step - 1U];
     } else if(app->ui.screen == McScreenCleanup) {
         if(app->cleanup_action || app->cleanup_refresh ||
            app->ui.cleanup_state == McCleanupScanning ||
-           app->ui.cleanup_state == McCleanupPurging) {
+           app->ui.cleanup_state == McCleanupPurging ||
+           app->ui.cleanup_state == McCleanupMigrating ||
+           app->ui.cleanup_state == McCleanupValidating) {
             j->operation = McIoCleanupStep;
             j->data.cleanup.index = app->ui.cleanup_index;
             j->data.cleanup.offset = app->ui.cleanup_offset;
@@ -932,7 +942,9 @@ static uint32_t mc_app_wait_timeout(
     if(app->startup_step && state == McIoIdle) return 0;
     if(app->ui.screen == McScreenCleanup && state == McIoIdle &&
        (app->cleanup_action || app->cleanup_refresh ||
-        app->ui.cleanup_state == McCleanupScanning || app->ui.cleanup_state == McCleanupPurging))
+        app->ui.cleanup_state == McCleanupScanning || app->ui.cleanup_state == McCleanupPurging ||
+        app->ui.cleanup_state == McCleanupMigrating ||
+        app->ui.cleanup_state == McCleanupValidating))
         return furi_ms_to_ticks(1U) + 1U;
     if(state == McIoIdle && app->pending_io != McPendingIoNone &&
        app->ui.screen != McScreenPlaying &&
@@ -1239,7 +1251,7 @@ void mc_app_retry(McApp* app, bool random_seed) {
 }
 void mc_app_continue(McApp* app) {
     mc_app_clear_directions(app);
-    app->ui.countdown_ticks = app->ui.settings.resume_countdown ? 90U : 0U;
+    app->ui.countdown_ticks = app->ui.settings.resume_countdown ? 3U * MC_TICKS_PER_SECOND : 0U;
     app->ui.screen = McScreenPlaying;
     app->pending_changes |= McGameChangeAll;
 }
@@ -1285,13 +1297,11 @@ void mc_app_practice_wave(McApp* app) {
     if(!mc_wave_start_restore(&app->wave_start, &app->ui.game)) return;
     mc_feedback_stop(&app->feedback);
     app->ui.wave_practice = true;
-    app->ui.screen = McScreenPlaying;
     app->ui.menu_index = app->ui.shot_notice_ticks = 0;
-    app->ui.countdown_ticks = app->ui.settings.resume_countdown ? 90U : 0U;
     app->ui.battery_overlay = false;
     app->ui.hud_valid = false;
     app->ui.high_score = 0;
-    mc_app_clear_directions(app);
+    mc_app_continue(app);
     mc_app_refresh_render_cache(app);
     app->pending_changes |= McGameChangeAll;
 }

@@ -197,6 +197,7 @@ void mc_settings_defaults(McSettings* settings) {
         .cursor_acceleration = true,
         .strong_cursor = false,
         .vibration_intensity = 1U,
+        .resume_countdown = true,
         .tap_pixels = 1U,
         .practice_aids = true,
     };

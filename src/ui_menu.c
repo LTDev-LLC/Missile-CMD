@@ -167,7 +167,7 @@ static const McSettingDef McSettingDefs[] = {
 #undef SETTING
 const char* mc_setting_label(uint8_t item) {
     return mc_text_at(
-        "Sound\0Vibration\0Cursor\0Render\0Reduced flash\0Show controls\0Missile tails\0Acceleration\0Bold cursor\0Vibration\0Reset settings\0Reset high scores\0LED\0Simple HUD\0Resume count\0Tap distance\0Save status / retry\0Impact warnings\0Clear pace history\0Invert colors",
+        "Sound\0Vibration\0Cursor\0Render\0Reduced flash\0Show controls\0Missile tails\0Acceleration\0Bold cursor\0Vibration\0Reset settings\0Reset high scores\0LED\0Simple HUD\0Resume timer\0Tap distance\0Save status / retry\0Impact warnings\0Clear pace history\0Invert colors",
         item < McSettingsItemCount ? item : McSettingsItemResetSettings);
 }
 const char* mc_setting_value(const McUiCommon* model, uint8_t item) {
