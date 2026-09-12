@@ -1,0 +1,337 @@
+[
+    {
+        "id": "Hud0",
+        "lines": [
+            "W10 Wave  012450 Score",
+            "H: difficulty best",
+            "A: auto battery",
+            "L=Left C=Center R=Right",
+            "09 ammo; -- none"
+        ]
+    },
+    {
+        "id": "Hud1",
+        "lines": [
+            "T: flying + queued",
+            "L/C/R ammo",
+            "LOW: total ammo <=3",
+            "Hold OK: battery",
+            "Back: pause/save"
+        ]
+    },
+    {
+        "id": "Lesson0",
+        "lines": [
+            "Aim above missiles",
+            "OK fires at cursor",
+            "Blasts need time"
+        ]
+    },
+    {
+        "id": "Lesson1",
+        "lines": [
+            "Smaller blasts",
+            "Kills cause blasts",
+            "Chain nearby missiles"
+        ]
+    },
+    {
+        "id": "Lesson2",
+        "lines": [
+            "Left battery empty",
+            "Hold OK; tap Up/Right",
+            "Release OK; fire"
+        ]
+    },
+    {
+        "id": "Lesson3",
+        "lines": [
+            "Repair lost sites",
+            "Ammo/radius: next wave only"
+        ]
+    },
+    {
+        "id": "Puzzle0",
+        "lines": [
+            "Chain the close group"
+        ]
+    },
+    {
+        "id": "Puzzle1",
+        "lines": [
+            "1 shot/side",
+            "Lead each pair"
+        ]
+    },
+    {
+        "id": "Puzzle2",
+        "lines": [
+            "Save a center shot",
+            "Wait for a crossing"
+        ]
+    },
+    {
+        "id": "Puzzle3",
+        "lines": [
+            "1 blast per cluster",
+            "Aim between heads"
+        ]
+    },
+    {
+        "id": "Puzzle4",
+        "lines": [
+            "Clear first group",
+            "Wait for next front"
+        ]
+    },
+    {
+        "id": "Puzzle5",
+        "lines": [
+            "Start near center",
+            "Chain outward"
+        ]
+    },
+    {
+        "id": "Puzzle6",
+        "lines": [
+            "Fast arrive first",
+            "Wait for paths to cross"
+        ]
+    },
+    {
+        "id": "Puzzle7",
+        "lines": [
+            "Catch squares pre-split",
+            "Or chain children"
+        ]
+    },
+    {
+        "id": "Puzzle8",
+        "lines": [
+            "Save 1 shot for right",
+            "Catch splitter early"
+        ]
+    },
+    {
+        "id": "Medal0",
+        "lines": [
+            "Chain depth 5"
+        ]
+    },
+    {
+        "id": "Medal1",
+        "lines": [
+            "75% hits, 20+ shots"
+        ]
+    },
+    {
+        "id": "Medal2",
+        "lines": [
+            "Perfect wave 5+"
+        ]
+    },
+    {
+        "id": "Medal3",
+        "lines": [
+            "5-wave perfect streak"
+        ]
+    },
+    {
+        "id": "Medal4",
+        "lines": [
+            "15 ammo after wave 5+"
+        ]
+    },
+    {
+        "id": "Medal5",
+        "lines": [
+            "Reach wave 10"
+        ]
+    },
+    {
+        "id": "Medal6",
+        "lines": [
+            "Clear Crisis wave 10"
+        ]
+    },
+    {
+        "id": "Medal7",
+        "lines": [
+            "Clear with 1 city"
+        ]
+    },
+    {
+        "id": "Medal8",
+        "lines": [
+            "Clear Daily wave 5"
+        ]
+    },
+    {
+        "id": "Medal9",
+        "lines": [
+            "Clear Limited wave 5"
+        ]
+    },
+    {
+        "id": "Medal10",
+        "lines": [
+            "Clear One city wave 5"
+        ]
+    },
+    {
+        "id": "Medal11",
+        "lines": [
+            "Clear Barrage wave 5"
+        ]
+    },
+    {
+        "id": "Medal12",
+        "lines": [
+            "Clear Perfect wave 5"
+        ]
+    },
+    {
+        "id": "Medal13",
+        "lines": [
+            "Clear Endless wave 20"
+        ]
+    },
+    {
+        "id": "Medal14",
+        "lines": [
+            "Finish 4 lessons"
+        ]
+    },
+    {
+        "id": "Debrief0",
+        "lines": [
+            "Complete!"
+        ]
+    },
+    {
+        "id": "Debrief1",
+        "lines": [
+            "Protect batteries"
+        ]
+    },
+    {
+        "id": "Debrief2",
+        "lines": [
+            "Chains save ammo"
+        ]
+    },
+    {
+        "id": "Debrief3",
+        "lines": [
+            "Lead missiles"
+        ]
+    },
+    {
+        "id": "Debrief4",
+        "lines": [
+            "Hit splitters early"
+        ]
+    },
+    {
+        "id": "Debrief5",
+        "lines": [
+            "Aim between heads"
+        ]
+    },
+    {
+        "id": "Debrief6",
+        "lines": [
+            "Lead fast missiles"
+        ]
+    },
+    {
+        "id": "Mode0",
+        "lines": [
+            "Defend 6 cities"
+        ]
+    },
+    {
+        "id": "Mode1",
+        "lines": [
+            "Same seed all day"
+        ]
+    },
+    {
+        "id": "Mode2",
+        "lines": [
+            "Share seed/difficulty"
+        ]
+    },
+    {
+        "id": "Mode3",
+        "lines": [
+            "5 shots/battery"
+        ]
+    },
+    {
+        "id": "Mode4",
+        "lines": [
+            "Defend 1 city"
+        ]
+    },
+    {
+        "id": "Mode5",
+        "lines": [
+            "Rapid launches"
+        ]
+    },
+    {
+        "id": "Mode6",
+        "lines": [
+            "Any site lost ends run"
+        ]
+    },
+    {
+        "id": "Mode7",
+        "lines": [
+            "Crisis from wave 10"
+        ]
+    },
+    {
+        "id": "Mode8",
+        "lines": [
+            "4 guided lessons"
+        ]
+    },
+    {
+        "id": "Mode9",
+        "lines": [
+            "Practice setup"
+        ]
+    },
+    {
+        "id": "Mode10",
+        "lines": [
+            "Clear 5 missions"
+        ]
+    },
+    {
+        "id": "Mode11",
+        "lines": [
+            "Score in 3 minutes"
+        ]
+    },
+    {
+        "id": "Mode12",
+        "lines": [
+            "2 shots: use chains"
+        ]
+    },
+    {
+        "id": "Mode13",
+        "lines": [
+            "5 waves each"
+        ]
+    },
+    {
+        "id": "Mode14",
+        "lines": [
+            "Missiles retarget"
+        ]
+    }
+]

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description"
+        content="Install Missile CMD and its in-game help on your Flipper Zero over USB. Choose a release and your firmware.">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Install Missile CMD · Flipper Zero</title>
+    <link rel="stylesheet" href="./style.css">
+    <script type="module" src="./app.mjs"></script>
+</head>
+
+<body>
+    <header><a class="wordmark" href="./">MISSILE CMD<span>FLIPPER ZERO</span></a><a id="source"
+            href="https://github.com/LTDev-LLC/Missile-CMD">Source & releases ↗</a></header>
+    <main>
+        <section class="intro" aria-labelledby="title">
+            <p class="eyebrow">READY FOR YOUR NEXT WAVE</p>
+            <h1 id="title">Mission control.<br>In your pocket.</h1>
+            <p>Install Missile CMD directly to your Flipper Zero. Pick your release, connect over USB, and get ready to
+                defend your cities.</p>
+            <figure><img src="./gameplay.png" width="128" height="64"
+                    alt="Missile CMD gameplay on the Flipper screen: intercept incoming missiles above six cities.">
+                <figcaption>Six cities. Three batteries. One more wave.</figcaption>
+            </figure>
+            <div class="requirements">
+                <h2>Before you connect</h2>
+                <p>Use desktop Chrome or Edge, a USB data cable, and a Flipper Zero with a microSD card. Close qFlipper,
+                    other Flipper tabs, and the game on your device.</p>
+            </div>
+        </section>
+        <section class="installer" aria-label="Install Missile CMD">
+            <div class="card-heading">
+                <h2>Install Missile CMD</h2><span class="badge">USB INSTALLER</span>
+            </div>
+            <div id="browser-notice" class="notice" hidden></div>
+            <div class="step"><span class="step-number">01</span>
+                <div>
+                    <h3>Choose your build</h3>
+                    <p class="muted">Files come from the published GitHub release.</p>
+                </div>
+            </div>
+            <div class="selectors"><label>Release<select id="release" disabled>
+                        <option>Loading releases…</option>
+                    </select></label><label>Firmware<select id="firmware" disabled>
+                        <option>Loading…</option>
+                    </select></label></div>
+            <div id="build-details" class="build-details" aria-live="polite"></div>
+            <p id="catalog-error" class="notice error" role="alert" hidden></p>
+            <div id="downloads" class="downloads"></div>
+            <div class="divider"></div>
+            <div class="step"><span class="step-number">02</span>
+                <div>
+                    <h3>Connect your Flipper</h3>
+                    <p class="muted">Choose your device in the browser’s USB prompt.</p>
+                </div>
+            </div>
+            <button id="connect" class="secondary" disabled>Connect Flipper Zero</button>
+            <p id="device" class="device" aria-live="polite">No device connected</p>
+            <button id="disconnect" class="text-button" hidden>Disconnect</button>
+            <div class="divider"></div>
+            <div class="step"><span class="step-number">03</span>
+                <div>
+                    <h3>Send it to your device</h3>
+                    <p class="muted">Updates the app and matching help. Each release keeps its own settings and saves.
+                        Existing data stays in its original folder.</p>
+                </div>
+            </div>
+            <p id="compatibility" class="compatibility" aria-live="polite">Connect to check your firmware.</p>
+            <label id="confirm-row" class="confirm" hidden><input id="confirm" type="checkbox"><span>I checked that this
+                    build supports my installed firmware.</span></label>
+            <button id="install" class="primary" disabled>Install Missile CMD</button>
+            <progress id="progress" value="0" max="100" aria-label="Installation progress" hidden></progress>
+            <p id="status" class="status" role="status" aria-live="polite">Choose a release to begin.</p>
+            <noscript>
+                <p class="notice">Enable JavaScript to use the USB installer, or download a release from GitHub.</p>
+            </noscript>
+        </section>
+    </main>
+    <footer><span>MISSILE CMD / LTDev LLC</span><span>App installation only · Your firmware stays in place</span>
+    </footer>
+</body>
+
+</html>

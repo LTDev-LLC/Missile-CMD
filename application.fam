@@ -1,0 +1,39 @@
+import runpy
+import sys
+from pathlib import Path
+
+_root = Path(os.path.dirname(app_manifest_path))
+sys.path.insert(0, str(_root / "tools"))
+try:
+    _app_version = runpy.run_path(str(_root / "tools/build_config.py"))["app_version"](_root)
+    runpy.run_path(str(_root / "tools/help_assets.py"))["generate"](_root)
+finally:
+    sys.path.pop(0)
+_version_core = _app_version.split("+", 1)[0].split("-", 1)[0]
+_version_parts = _version_core.split(".")
+if len(_version_parts) != 3 or not all(_part.isdigit() for _part in _version_parts):
+    raise ValueError("VERSION must contain a numeric SemVer core")
+
+App(
+    appid="missile_cmd",
+    name="Missile CMD",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="missile_cmd_app",
+    stack_size=4 * 1024,
+    fap_version=(int(_version_parts[0]), int(_version_parts[1])),
+    fap_category="Games",
+    fap_icon="missile_cmd.png",
+    fap_author="LTDev LLC",
+    fap_description="Defend six cities in a pocket missile-defense arcade game.",
+    sources=["missile_cmd.c"],
+    fap_private_libs=[
+        Lib(
+            name="missile_cmd_core",
+            # The SDK resolves these paths from lib/missile_cmd_core
+            sources=["../../src/missile_cmd_core.c"],
+            fap_include_paths=["../../src/include"],
+            cincludes=["src/include", "build/generated"],
+            cflags=["-fwhole-program", "-fno-builtin-snprintf"],
+        ),
+    ],
+)

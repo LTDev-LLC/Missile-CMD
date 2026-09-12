@@ -1,0 +1,154 @@
+name: Build and test
+
+on:
+  push:
+    # Main is checked once by the ordered Release pipeline.
+    branches-ignore: [main]
+    tags: ['**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      latest:
+        description: Check latest SDKs without changing the committed lock
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact source commit selected by the publishing workflow
+        type: string
+        default: ''
+      latest:
+        type: boolean
+        default: false
+  schedule:
+    - cron: '37 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: missile-check-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.lock.outputs.matrix }}
+      ufbt: ${{ steps.lock.outputs.ufbt }}
+      toolchain: ${{ steps.lock.outputs.toolchain }}
+      toolchain_sha256: ${{ steps.lock.outputs.toolchain_sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Resolve SDKs once
+        id: lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST_SDK: ${{ github.event_name == 'schedule' || inputs.latest }}
+        run: |
+          if [ "$LATEST_SDK" = "true" ]; then
+            python tools/firmware.py resolve --latest --output build/resolved-lock.json
+          else
+            python tools/firmware.py resolve --output build/resolved-lock.json
+          fi
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          lock = json.loads(Path('build/resolved-lock.json').read_text())
+          rows = [{'firmware': name, **entry} for name, entry in lock['firmwares'].items()]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('matrix=' + json.dumps({'include': rows}) + '\n')
+              output.write('toolchain_sha256=' + lock['toolchains']['x86_64-linux']['sha256'] + '\n')
+              for key in ('ufbt', 'toolchain'):
+                  output.write(f'{key}={lock[key]}\n')
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: resolved-sdk-lock
+          path: build/resolved-lock.json
+          if-no-files-found: error
+
+  host:
+    name: Host tests and formatting
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - run: python -m pip install --require-hashes -r requirements-build.txt
+      - run: make test TEST_SANITIZERS='-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1'
+      - run: make format-check
+      - run: make screenshots-check
+
+  web:
+    name: Web installer tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: node --test tests/web/*.test.mjs
+      - run: python3 -m unittest discover -s tests -p 'test_pages.py'
+      - run: python3 -m unittest discover -s tests -p 'test_build_config.py'
+
+  firmware:
+    name: Firmware (${{ matrix.firmware }})
+    needs: [resolve, host]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    env:
+      FIRMWARE: ${{ matrix.firmware }}
+      SDK_LOCK_FILE: build/resolved-lock.json
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+      - run: python -m pip install --require-hashes -r requirements-build.txt
+      - uses: actions/download-artifact@v8
+        with:
+          name: resolved-sdk-lock
+          path: build
+      - uses: actions/cache@v6
+        with:
+          path: ~/.ufbt/toolchain
+          key: toolchain-${{ runner.os }}-${{ runner.arch }}-${{ needs.resolve.outputs.toolchain }}-${{ needs.resolve.outputs.toolchain_sha256 }}-ufbt-${{ needs.resolve.outputs.ufbt }}
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/missile-cmd/ufbt/${{ matrix.firmware }}
+          key: sdk-${{ runner.os }}-${{ runner.arch }}-${{ matrix.firmware }}-${{ matrix.version }}-${{ matrix.sha256 }}-${{ needs.resolve.outputs.toolchain }}-${{ needs.resolve.outputs.ufbt }}
+      - name: Verify SDK and lint
+        run: make sdk-lint
+      - name: Build firmware app
+        run: make build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: missile-cmd-${{ matrix.firmware }}
+          path: |
+            dist/missile_cmd-${{ matrix.firmware }}.fap
+            dist/missile_cmd-${{ matrix.firmware }}.zip
+            dist/*/help.bin
+            build_metadata/${{ matrix.firmware }}/
+          if-no-files-found: error

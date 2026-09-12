@@ -1,0 +1,39 @@
+{
+    "ufbt": "0.2.6",
+    "toolchain": "39",
+    "firmwares": {
+        "official": {
+            "version": "1.4.3",
+            "url": "https://update.flipperzero.one/builds/firmware/1.4.3/flipper-z-f7-sdk-1.4.3.zip",
+            "sha256": "2e89e70c6b5770440cbf02f2ca01a2f8804e05ddb77f66afdd23ed2584740c7f"
+        },
+        "unleashed": {
+            "version": "unlshd-092",
+            "url": "https://github.com/DarkFlippers/unleashed-firmware/releases/download/unlshd-092/flipper-z-f7-sdk-unlshd-092.zip",
+            "sha256": "04348c3a4bc3d1f536d40433b98cbdcae19d9be085deaa8d301311a185d21ba8"
+        },
+        "momentum": {
+            "version": "mntm-012",
+            "url": "https://github.com/Next-Flip/Momentum-Firmware/releases/download/mntm-012/flipper-z-f7-sdk-mntm-012.zip",
+            "sha256": "c90530c3e0aa7bc4356b8521df20d23d7b4a5435ab58a2530ffb696200408cc2"
+        }
+    },
+    "toolchains": {
+        "x86_64-linux": {
+            "url": "https://update.flipperzero.one/builds/toolchain/gcc-arm-none-eabi-12.3-x86_64-linux-flipper-39.tar.gz",
+            "sha256": "c044c59233f66f6efcf854affe2d5e09dbad04d68709d513bc760b1d98895853"
+        },
+        "arm64-darwin": {
+            "url": "https://update.flipperzero.one/builds/toolchain/gcc-arm-none-eabi-12.3-arm64-darwin-flipper-39.tar.gz",
+            "sha256": "d6c6fc35607af9aa357d549d29f230799c91b973b938ce776e55e1a8b99daea0"
+        },
+        "x86_64-darwin": {
+            "url": "https://update.flipperzero.one/builds/toolchain/gcc-arm-none-eabi-12.3-x86_64-darwin-flipper-39.tar.gz",
+            "sha256": "95360c4da3fb718fe8d7116f12f34a15558dac604fd06419f15f0cb061ad5783"
+        },
+        "aarch64-linux": {
+            "url": "https://update.flipperzero.one/builds/toolchain/gcc-arm-none-eabi-12.3-aarch64-linux-flipper-39.tar.gz",
+            "sha256": "d06c4b00233b39c3b45c1e14fed663d45ed6314a09f20c2af6ed179e2dce3849"
+        }
+    }
+}

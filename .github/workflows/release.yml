@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish VERSION as a release (disable to only refresh Pages after checks)
+        type: boolean
+        default: true
+  push:
+    branches:
+      - main
+  # Release changes also refresh the installer through the checked pipeline.
+  # Releases created by this workflow's GITHUB_TOKEN do not trigger another run.
+  release:
+    types: [published, edited, deleted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: missile-cmd-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.plan.outputs.sha }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          # Old release edits must build trusted main, not the release tag.
+          ref: ${{ github.event_name == 'release' && 'main' || github.sha }}
+          fetch-depth: 0
+
+      - name: Select publication steps
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          publish=false
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            publish="$PUBLISH_RELEASE"
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ "$BEFORE" =~ ^0+$ ]]; then
+              publish=true
+            else
+              git cat-file -e "$BEFORE^{commit}"
+              changed="$(git diff --name-only "$BEFORE" HEAD -- VERSION)"
+              if [[ -n "$changed" ]]; then
+                publish=true
+              fi
+            fi
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Read and validate version
+        id: version
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n' < VERSION)"
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$'
+          if [[ ! "$version" =~ $semver ]]; then
+            echo "VERSION must contain one valid SemVer value; got: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release tag is unused
+        if: steps.plan.outputs.publish == 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Increment VERSION before releasing." >&2
+            exit 1
+          fi
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+
+  release:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Download all verified firmware artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: missile-cmd-*
+          merge-multiple: true
+          path: release
+      - name: Verify release artifacts
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: python3 tools/artifacts.py --root release --version "$VERSION"
+
+      - name: Publish tagged GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          release_flags=()
+          core_version="${VERSION%%+*}"
+          if [[ "$core_version" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "$TAG" \
+            --target "$SOURCE_SHA" \
+            --title "Missile CMD $TAG" \
+            --generate-notes \
+            "${release_flags[@]}" \
+            release/dist/*.fap \
+            release/dist/*.zip \
+            release/dist/*/help.bin \
+            release/dist/install-manifest.json
+
+  pages:
+    needs: [prepare, build, release]
+    # A normal main push needs no new release. Failures must still block Pages.
+    if: >-
+      ${{ !cancelled() && needs.build.result == 'success' &&
+          (needs.release.result == 'success' || needs.release.result == 'skipped') }}
+    uses: ./.github/workflows/pages.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

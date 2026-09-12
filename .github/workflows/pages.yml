@@ -1,0 +1,57 @@
+name: GitHub Pages installer
+
+on:
+  # The Release pipeline calls this only after its checks and release finish.
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact source commit that passed the build and tests
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: missile-cmd-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test installer and release catalog
+        run: |
+          node --test tests/web/*.test.mjs
+          python3 -m unittest discover -s tests -p 'test_pages.py'
+          python3 -m unittest discover -s tests -p 'test_build_config.py'
+      - name: Mirror and verify published releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 tools/build_pages.py --repository "$REPOSITORY"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v5
+        id: deployment
