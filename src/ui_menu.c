@@ -124,10 +124,11 @@ static const uint8_t McSettingGroups[4][7] = {
      McSettingsItemResetSettings,
      McSettingsItemResetScores,
      McSettingsItemClearPace,
+     McSettingsItemVersionData,
      McSettingsItemCount},
 };
 uint8_t mc_settings_group_count(uint8_t group) {
-    return group == 0U ? 5U : group == 1U ? 7U : group == 2U ? 4U : group == 3U ? 4U : 0U;
+    return group == 0U ? 5U : group == 1U ? 7U : group == 2U ? 4U : group == 3U ? 5U : 0U;
 }
 uint8_t mc_settings_group_item(uint8_t group, uint8_t row) {
     return row < mc_settings_group_count(group) ? McSettingGroups[group][row] :
@@ -163,14 +164,17 @@ static const McSettingDef McSettingDefs[] = {
     {0},
     SETTING(impact_warnings, 2, 1, 0, 0),
     {0},
-    SETTING(invert_colors, 2, 1, 0, 0)};
+    SETTING(invert_colors, 2, 1, 0, 0),
+    {0}};
 #undef SETTING
 const char* mc_setting_label(uint8_t item) {
     return mc_text_at(
-        "Sound\0Vibration\0Cursor\0Render\0Reduced flash\0Show controls\0Missile tails\0Acceleration\0Bold cursor\0Vibration\0Reset settings\0Reset high scores\0LED\0Simple HUD\0Resume timer\0Tap distance\0Save status / retry\0Impact warnings\0Clear pace history\0Invert colors",
+        "Sound\0Vibration\0Cursor\0Render\0Reduced flash\0Show controls\0Missile tails\0Acceleration\0Bold cursor\0Vibration\0Reset settings\0Reset high scores\0LED\0Simple HUD\0Resume timer\0Tap distance\0Save status / retry\0Impact warnings\0Clear pace history\0Invert colors\0Version data",
         item < McSettingsItemCount ? item : McSettingsItemResetSettings);
 }
 const char* mc_setting_value(const McUiCommon* model, uint8_t item) {
+    if(item == McSettingsItemVersionData && model->settings_return_screen != McScreenTitle)
+        return "Title only";
     if(item >= McSettingsItemCount || !McSettingDefs[item].count) return NULL;
     const McSettingDef* d = &McSettingDefs[item];
     const uint8_t value = *((const unsigned char*)&model->settings + d->offset);

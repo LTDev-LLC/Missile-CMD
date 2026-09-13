@@ -286,13 +286,14 @@ bool mc_settings_decode(McSettings* settings, const uint8_t* input, size_t size)
     // Validate raw boolean bytes before storing them in bool fields
     if(!mc_settings_payload_valid(payload, &options) || (!legacy && payload[29] > 1U))
         return false;
-    memset(settings, 0, sizeof(*settings));
+    // Start with current defaults so fields absent from older schemas are initialized.
+    mc_settings_defaults(settings);
     unsigned char* bytes = (unsigned char*)settings;
     for(uint8_t i = 0; i < sizeof(McSettingOffsets); i++)
         bytes[McSettingOffsets[i]] = payload[i];
     settings->last_seed = mc_read_u32(payload + 20);
     settings->last_options = options;
-    settings->invert_colors = !legacy && payload[29];
+    if(!legacy) settings->invert_colors = payload[29];
     return true;
 }
 

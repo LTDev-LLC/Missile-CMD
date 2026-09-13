@@ -67,7 +67,8 @@ static bool mc_cleanup_older(const char* name) {
 }
 
 static bool mc_migration_asset(const char* name) {
-    return !strcmp(name, ".migration.tmp") ||
+    return !strcmp(name, ".migration.tmp") || !strcmp(name, MC_VERSION_REVIEW_FILE) ||
+           !strcmp(name, MC_VERSION_REVIEW_FILE ".tmp") ||
            (!strncmp(name, MC_HELP_FILE, sizeof(MC_HELP_FILE) - 1U) &&
             (!name[sizeof(MC_HELP_FILE) - 1U] || name[sizeof(MC_HELP_FILE) - 1U] == '.'));
 }
@@ -117,12 +118,7 @@ bool mc_cleanup_candidate(const char* name) {
     return !*cursor;
 }
 
-static void mc_cleanup_close(McCleanup* c) {
-    if(c->scan) {
-        storage_dir_close(c->scan);
-        storage_file_free(c->scan);
-        c->scan = NULL;
-    }
+static void mc_cleanup_transfer_close(McCleanup* c) {
     if(c->input) {
         storage_file_close(c->input);
         storage_file_free(c->input);
@@ -132,6 +128,15 @@ static void mc_cleanup_close(McCleanup* c) {
         storage_file_close(c->output);
         storage_file_free(c->output);
         c->output = NULL;
+    }
+}
+
+static void mc_cleanup_close(McCleanup* c) {
+    mc_cleanup_transfer_close(c);
+    if(c->scan) {
+        storage_dir_close(c->scan);
+        storage_file_free(c->scan);
+        c->scan = NULL;
     }
 }
 
@@ -160,6 +165,62 @@ static void mc_cleanup_fail(McCleanup* c) {
     c->result = McStorageIoError;
 }
 
+// A torn or invalid marker only causes another prompt; it can never authorize deletion.
+static bool mc_review_file_valid(Storage* storage, const char* path) {
+    File* file = storage_file_alloc(storage);
+    if(!file) return false;
+    char marker[4];
+    const bool valid = storage_file_open(file, path, FSAM_READ, FSOM_OPEN_EXISTING) &&
+                       storage_file_size(file) == sizeof(marker) &&
+                       storage_file_read(file, marker, sizeof(marker)) == sizeof(marker) &&
+                       !memcmp(marker, "MCV1", sizeof(marker));
+    storage_file_close(file);
+    storage_file_free(file);
+    return valid;
+}
+
+bool mc_cleanup_reviewed(Storage* storage) {
+    return mc_review_file_valid(storage, APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE));
+}
+
+static bool mc_cleanup_remember(McCleanup* c) {
+    if(mc_cleanup_reviewed(c->storage)) return true;
+    const FS_Error directory = storage_common_mkdir(c->storage, APP_DATA_PATH(MC_DATA_FOLDER));
+    if(directory != FSE_OK && directory != FSE_EXIST) return false;
+    File* file = storage_file_alloc(c->storage);
+    if(!file) return false;
+    bool saved = storage_file_open(
+                     file,
+                     APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE ".tmp"),
+                     FSAM_WRITE,
+                     FSOM_CREATE_ALWAYS) &&
+                 storage_file_write(file, "MCV1", 4U) == 4U && storage_file_sync(file);
+    if(!storage_file_close(file)) saved = false;
+    storage_file_free(file);
+    if(!saved || !mc_review_file_valid(
+                     c->storage, APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE ".tmp")))
+        return false;
+    const FS_Error removed = storage_common_remove(
+        c->storage, APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE));
+    if(removed != FSE_OK && removed != FSE_NOT_EXIST) return false;
+    return storage_common_rename(
+               c->storage,
+               APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE ".tmp"),
+               APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE)) == FSE_OK;
+}
+
+void mc_cleanup_keep(McCleanup* c) {
+    // Leaving a failed import must still offer recovery on the next launch.
+    if(c->state != McCleanupFailed) {
+        c->remembering = true;
+        if(!mc_cleanup_remember(c)) {
+            mc_cleanup_fail(c);
+            return;
+        }
+    }
+    c->state = McCleanupDone;
+}
+
 const char* mc_cleanup_name(const McCleanup* c, size_t index) {
     const McCleanupFolder* folder = c->folders;
     while(folder && index--)
@@ -176,11 +237,14 @@ void mc_cleanup_approve(McCleanup* c) {
 
 void mc_cleanup_retry(McCleanup* c) {
     if(c->state != McCleanupFailed) return;
-    if(c->migrating && !c->migrated) {
+    if(c->remembering) {
+        if(mc_cleanup_remember(c)) c->state = McCleanupDone;
+    } else if(c->migrating && !c->migrated) {
         c->root_length = 0U;
         c->resuming = c->verifying = false;
         c->validation = 0;
-        c->state = McCleanupMigrating;
+        c->state = McCleanupPrompt;
+        mc_cleanup_migrate(c);
     } else if(c->approved) {
         c->root_length = 0U;
         c->state = McCleanupPurging;
@@ -252,7 +316,7 @@ static void mc_cleanup_scan_step(McCleanup* c) {
         c->target = c->folders;
         return;
     }
-    if(!file_info_is_dir(&info) || !mc_cleanup_candidate(name)) return;
+    if(!file_info_is_dir(&info) || !mc_cleanup_older(name)) return;
     const size_t size = sizeof(McCleanupFolder) + strlen(name) + 1U;
     if(size > MC_CLEANUP_ALLOCATION_BUDGET - c->allocated) {
         c->limited = true;
@@ -293,7 +357,7 @@ static void mc_cleanup_purge_step(McCleanup* c) {
         return;
     }
     if(!c->root_length) {
-        if(c->migrating && !mc_cleanup_older(c->target->name)) {
+        if(!mc_cleanup_older(c->target->name)) {
             c->target = c->target->next;
             return;
         }
@@ -365,7 +429,14 @@ static void mc_cleanup_purge_step(McCleanup* c) {
 
 void mc_cleanup_migrate(McCleanup* c) {
     if(c->state != McCleanupPrompt || !c->source) return;
-    c->approved = c->migrating = true;
+    c->migrating = true;
+    c->remembering = false;
+    const FS_Error removed = storage_common_remove(
+        c->storage, APP_DATA_PATH(MC_DATA_FOLDER "/" MC_VERSION_REVIEW_FILE));
+    if(removed != FSE_OK && removed != FSE_NOT_EXIST) {
+        mc_cleanup_fail(c);
+        return;
+    }
     c->root_length = 0;
     c->state = McCleanupMigrating;
 }
@@ -384,11 +455,11 @@ static bool mc_migration_destination(McCleanup* c, char* path, size_t size) {
     return length >= 0 && (size_t)length < size;
 }
 
-// Preserve the finished child's name after the terminator, then find it when reopening
-// the parent. The source tree stays unchanged throughout copying, so no recursion is needed.
+// File copies keep their parent's cursor. Only returning from a child directory needs
+// to reopen the parent and find the child's name preserved after the terminator.
 static void mc_migration_parent(McCleanup* c) {
     *strrchr(c->path, '/') = '\0';
-    c->resuming = true;
+    c->resuming = c->scan == NULL;
 }
 
 // Copy and read back at most 512 bytes per worker step, using the existing I/O scratch.
@@ -420,7 +491,7 @@ static void mc_migration_copy_step(McCleanup* c, uint8_t* scratch) {
         c->verifying = true;
         return;
     }
-    mc_cleanup_close(c);
+    mc_cleanup_transfer_close(c);
     char destination[512];
     FileInfo info;
     if(!mc_migration_destination(c, destination, sizeof(destination))) {
@@ -489,7 +560,9 @@ void mc_cleanup_migration_step(McCleanup* c, uint8_t* scratch) {
         return;
     }
     if(!strcmp(name, ".") || !strcmp(name, "..")) return;
-    if(parent == c->root_length && mc_migration_asset(name)) return;
+    if(parent == c->root_length &&
+       (mc_migration_asset(name) || mc_persistence_migration_file(name)))
+        return;
     const size_t length = strlen(name);
     if(!length || strchr(name, '/') || strchr(name, '\\') ||
        parent + length + 2U > sizeof(c->path)) {
@@ -521,7 +594,6 @@ void mc_cleanup_migration_step(McCleanup* c, uint8_t* scratch) {
         mc_cleanup_fail(c);
         return;
     }
-    mc_cleanup_close(c);
     c->input = storage_file_alloc(c->storage);
     c->output = storage_file_alloc(c->storage);
     if(!storage_file_open(c->input, c->path, FSAM_READ, FSOM_OPEN_EXISTING) ||
@@ -537,24 +609,12 @@ void mc_cleanup_validated(McCleanup* c, McStorageResult result) {
         return;
     }
     if(++c->validation < 3U + MC_SAVE_SLOTS) return;
+    if(!mc_cleanup_remember(c)) {
+        mc_cleanup_fail(c);
+        return;
+    }
     c->migrated = true;
-    c->root_length = 0;
-    c->remaining = 0;
-    // Delete the source last so an interrupted prune cannot select an older source next time.
-    McCleanupFolder** position = &c->folders;
-    while(*position != c->source)
-        position = &(*position)->next;
-    *position = c->source->next;
-    position = &c->folders;
-    while(*position)
-        position = &(*position)->next;
-    *position = c->source;
-    c->source->next = NULL;
-    c->tail = c->source;
-    for(McCleanupFolder* f = c->folders; f; f = f->next)
-        if(mc_cleanup_older(f->name)) c->remaining++;
-    c->target = c->folders;
-    c->state = McCleanupPurging;
+    c->state = McCleanupDone;
 }
 
 void mc_cleanup_step(McCleanup* c) {

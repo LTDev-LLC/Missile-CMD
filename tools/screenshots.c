@@ -91,9 +91,25 @@ static void capture_pages(const char* output) {
     app.ui.cleanup_state = McCleanupMigrating;
     app.ui.cleanup_migrating = true;
     capture(output, "migration_progress", &app, McScreenCleanup);
+    app.ui.cleanup_state = McCleanupValidating;
+    capture(output, "migration_upgrade", &app, McScreenCleanup);
     app.ui.cleanup_state = McCleanupFailed;
     app.ui.storage_result = McStorageInvalid;
     capture(output, "migration_failed", &app, McScreenCleanup);
+
+    prepare(&app);
+    app.ui.settings_group = 3;
+    app.ui.menu_index = McSettingsItemVersionData;
+    app.ui.settings_return_screen = McScreenTitle;
+    capture(output, "version_data_settings", &app, McScreenSettings);
+    app.ui.cleanup_state = McCleanupPrompt;
+    app.ui.cleanup_count = 3;
+    strcpy(app.ui.cleanup_name, "0.9.0+build.2");
+    app.ui.menu_index = 1;
+    capture(output, "cleanup_preview", &app, McScreenCleanup);
+    app.ui.cleanup_confirm = true;
+    app.ui.menu_index = 0;
+    capture(output, "cleanup_confirm", &app, McScreenCleanup);
 
     prepare(&app);
     app.ui.settings_group = 1U;

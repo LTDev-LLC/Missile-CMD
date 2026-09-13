@@ -10,6 +10,7 @@ union {
     McHelpPage help;
 };
 bool cleanup_approved, cleanup_limited, cleanup_can_migrate, cleanup_migrating;
+bool cleanup_confirm;
 McSettings settings;
 McScreen screen;
 McScreen settings_return_screen;

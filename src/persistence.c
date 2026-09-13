@@ -21,6 +21,18 @@ enum {
 // Family indices also select trust bits; pace uses a dynamic filename
 static const char McFileNames[] = "settings\0scores\0profile\0save0\0save1\0save2\0\0pace-index";
 
+bool mc_persistence_migration_file(const char* name) {
+    for(uint8_t key = McFileSettings; key <= McFileCheckpoint2; key++) {
+        const char* base = mc_text_at(McFileNames, key);
+        const size_t length = strlen(base);
+        if(strncmp(name, base, length) || name[length] != '.') continue;
+        const char* extension = name + length + 1U;
+        if(!strcmp(extension, "dat") || !strcmp(extension, "bak") || !strcmp(extension, "tmp"))
+            return true;
+    }
+    return false;
+}
+
 static void mc_history_free(McPersistence* p);
 static McPaceHistory* mc_history_get(McPersistence* p);
 static void mc_history_touch(McPersistence* p, const McGame* game, uint32_t score);
@@ -67,7 +79,8 @@ static void
 static McStorageResult
     mc_read_blob(McPersistence* p, const char* path, uint8_t* data, size_t cap, size_t* size) {
     if(!p || !p->storage || !p->scratch) return McStorageIoError;
-    if(!storage_file_exists(p->storage, path)) return McStorageMissing;
+    const FS_Error status = storage_common_stat(p->storage, path, NULL);
+    if(status != FSE_OK) return status == FSE_NOT_EXIST ? McStorageMissing : McStorageIoError;
     File* file = storage_file_alloc(p->storage);
     McStorageResult result = McStorageIoError;
     if(storage_file_open(file, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
@@ -85,17 +98,28 @@ static McStorageResult
 }
 
 typedef McStorageResult (*McReadCopy)(McPersistence*, const char*, void*);
-static McStorageResult
-    mc_load_copies(McPersistence* p, uint8_t key, McReadCopy read, void* target) {
+static McStorageResult mc_load_copies_from(
+    McPersistence* p,
+    uint8_t key,
+    McReadCopy read,
+    void* target,
+    const char* folder) {
     if(!p || !p->scratch) return McStorageIoError;
     McStorageResult directory = mc_data_directory(p);
     if(directory != McStorageOk) return directory;
     p->trusted_primary &= (uint16_t) ~(1U << key);
     p->recovered = false;
     McStorageResult first = McStorageMissing;
-    char path[MC_STORAGE_PATH_SIZE];
+    char path[512];
     for(uint8_t copy = 0; copy < 2; copy++) {
-        mc_storage_path(p, path, key, copy ? "bak" : "dat");
+        const int length = snprintf(
+            path,
+            sizeof(path),
+            APP_DATA_PATH("%s/%s.%s"),
+            folder,
+            key == McFilePace ? p->pace_name : mc_text_at(McFileNames, key),
+            copy ? "bak" : "dat");
+        if(length < 0 || (size_t)length >= sizeof(path)) return McStorageInvalid;
         McStorageResult result = read(p, path, target);
         if(result == McStorageOk) {
             if(!copy) p->trusted_primary |= (uint16_t)(1U << key);
@@ -105,6 +129,25 @@ static McStorageResult
         if(first == McStorageMissing) first = result;
     }
     return first;
+}
+static McStorageResult
+    mc_load_copies(McPersistence* p, uint8_t key, McReadCopy read, void* target) {
+    return mc_load_copies_from(p, key, read, target, MC_DATA_FOLDER);
+}
+
+// Current records, including backups, win as a family. Only absent families use older data.
+static McStorageResult mc_migration_read(
+    McPersistence* p,
+    const char* source,
+    uint8_t key,
+    McReadCopy read,
+    void* target) {
+    McStorageResult result = mc_load_copies(p, key, read, target);
+    if(result == McStorageMissing) {
+        result = mc_load_copies_from(p, key, read, target, source);
+        p->trusted_primary &= (uint16_t) ~(1U << key);
+    }
+    return result;
 }
 typedef struct {
     void* target;
@@ -139,7 +182,8 @@ static McStorageResult mc_write_parts(
     const uint8_t* second,
     size_t second_size,
     const uint8_t* third,
-    size_t third_size) {
+    size_t third_size,
+    bool migrating) {
     if(!p || !p->storage || !p->scratch || !data || size == 0U) return McStorageIoError;
     const McStorageResult directory = mc_data_directory(p);
     if(directory != McStorageOk) return directory;
@@ -158,10 +202,27 @@ static McStorageResult mc_write_parts(
         if(parts[i].size)
             written = storage_file_write(file, parts[i].data, parts[i].size) == parts[i].size;
     if(written) written = storage_file_sync(file);
-    storage_file_close(file);
+    if(!storage_file_close(file)) written = false;
+    if(written && migrating) {
+        // Verify the staged current-format bytes before replacing any existing primary.
+        written = storage_file_open(file, temporary, FSAM_READ, FSOM_OPEN_EXISTING) &&
+                  storage_file_size(file) == size + second_size + third_size;
+        uint8_t verify[64];
+        for(uint8_t i = 0; written && i < 3; i++) {
+            for(size_t offset = 0; written && offset < parts[i].size;) {
+                const size_t remaining = parts[i].size - offset;
+                const size_t chunk = remaining < sizeof(verify) ? remaining : sizeof(verify);
+                written = storage_file_read(file, verify, chunk) == chunk &&
+                          !memcmp(verify, parts[i].data + offset, chunk);
+                offset += chunk;
+            }
+        }
+        if(!storage_file_close(file)) written = false;
+    }
     storage_file_free(file);
     if(!written) return McStorageIoError;
-    // A corrupt primary must never overwrite the last good backup
+    // Retain a validated current copy across interrupted publication. Migration also
+    // prefers this backup over older source records when only the backup survives.
     if(p->trusted_primary & (1U << key)) {
         if(storage_common_rename(p->storage, primary, backup) != FSE_OK) return McStorageIoError;
         p->trusted_primary &= (uint16_t) ~(1U << key);
@@ -173,7 +234,23 @@ static McStorageResult mc_write_parts(
 
 static McStorageResult
     mc_write_blob(McPersistence* p, uint8_t key, const uint8_t* data, size_t size) {
-    return mc_write_parts(p, key, data, size, NULL, 0U, NULL, 0U);
+    return mc_write_parts(p, key, data, size, NULL, 0U, NULL, 0U, false);
+}
+
+typedef size_t (*McEncodeBlob)(const void*, uint8_t*, size_t);
+static McStorageResult mc_migrate_blob(
+    McPersistence* p,
+    const char* source,
+    uint8_t key,
+    void* target,
+    McDecodeBlob decode,
+    McEncodeBlob encode,
+    size_t capacity) {
+    McBlobRead read = {target, decode, p->scratch, capacity};
+    const McStorageResult result = mc_migration_read(p, source, key, mc_blob_read_copy, &read);
+    if(result != McStorageOk && result != McStorageMissing) return result;
+    const size_t size = encode(target, p->scratch, MC_PERSISTENCE_SCRATCH_SIZE);
+    return mc_write_parts(p, key, p->scratch, size, NULL, 0U, NULL, 0U, true);
 }
 
 // Typed adapters avoid calling through incompatible function-pointer types
@@ -243,17 +320,67 @@ McStorageResult mc_persistence_save_profile(McPersistence* p, const McProfile* p
         p->scratch,
         mc_profile_encode(profile, p->scratch, MC_PERSISTENCE_SCRATCH_SIZE));
 }
+static size_t mc_save_settings_codec(const void* target, uint8_t* data, size_t capacity) {
+    return mc_settings_encode(target, data, capacity);
+}
+static size_t mc_save_scores_codec(const void* target, uint8_t* data, size_t capacity) {
+    return mc_score_tables_encode(target, data, capacity);
+}
+static size_t mc_save_profile_codec(const void* target, uint8_t* data, size_t capacity) {
+    return mc_profile_encode(target, data, capacity);
+}
+McStorageResult
+    mc_persistence_migrate_settings(McPersistence* p, const char* source, McSettings* settings) {
+    mc_settings_defaults(settings);
+    return mc_migrate_blob(
+        p,
+        source,
+        McFileSettings,
+        settings,
+        mc_load_settings_codec,
+        mc_save_settings_codec,
+        MC_SETTINGS_ENCODED_SIZE);
+}
+McStorageResult
+    mc_persistence_migrate_scores(McPersistence* p, const char* source, McScoreTables* scores) {
+    mc_score_tables_defaults(scores);
+    return mc_migrate_blob(
+        p,
+        source,
+        McFileScores,
+        scores,
+        mc_load_scores_codec,
+        mc_save_scores_codec,
+        MC_SCORES_ENCODED_SIZE);
+}
+McStorageResult
+    mc_persistence_migrate_profile(McPersistence* p, const char* source, McProfile* profile) {
+    mc_profile_defaults(profile);
+    return mc_migrate_blob(
+        p,
+        source,
+        McFileProfile,
+        profile,
+        mc_load_profile_codec,
+        mc_save_profile_codec,
+        MC_PROFILE_ENCODED_SIZE);
+}
+
 // The generation header and run snapshot have independent checksums
-McStorageResult mc_persistence_checkpoint(McPersistence* p, const McRunSnapshot* run) {
+static McStorageResult
+    mc_checkpoint_write(McPersistence* p, const McRunSnapshot* run, bool migrating) {
     if(!p || !p->scratch || p->slot >= MC_SAVE_SLOTS) return McStorageInvalid;
     const size_t size = mc_run_snapshot_encode(run, p->scratch, MC_PERSISTENCE_SCRATCH_SIZE);
     if(!size) return McStorageInvalid;
     uint8_t header[24] = {'M', 'C', 'S', '2'};
     if(!mc_wave_start_matches(run->wave_start, run->game)) return McStorageInvalid;
     const size_t replay_size = run->wave_start ? run->wave_start->size : 0U;
-    const uint32_t generation = p->generation + 1U;
+    const uint32_t generation = p->generation + !migrating;
     const uint32_t fields[] = {
-        generation, (uint32_t)size, furi_hal_rtc_get_timestamp(), (uint32_t)replay_size};
+        generation,
+        (uint32_t)size,
+        migrating ? p->timestamp : furi_hal_rtc_get_timestamp(),
+        (uint32_t)replay_size};
     for(uint8_t field = 0U; field < 4U; field++)
         mc_write_u32(header + 4U + field * 4U, fields[field]);
     const uint32_t crc = mc_crc32(header, 20U);
@@ -266,9 +393,13 @@ McStorageResult mc_persistence_checkpoint(McPersistence* p, const McRunSnapshot*
         p->scratch,
         size,
         replay_size ? run->wave_start->data : NULL,
-        replay_size);
+        replay_size,
+        migrating);
     if(result == McStorageOk) p->generation = generation;
     return result;
+}
+McStorageResult mc_persistence_checkpoint(McPersistence* p, const McRunSnapshot* run) {
+    return mc_checkpoint_write(p, run, false);
 }
 
 typedef struct {
@@ -296,7 +427,8 @@ static bool
 // Accept a copy only when both its container and snapshot validate; otherwise try the backup
 static McStorageResult mc_checkpoint_copy(McPersistence* p, const char* path, void* context) {
     McRunSnapshot* run = context;
-    if(!storage_file_exists(p->storage, path)) return McStorageMissing;
+    const FS_Error status = storage_common_stat(p->storage, path, NULL);
+    if(status != FSE_OK) return status == FSE_NOT_EXIST ? McStorageMissing : McStorageIoError;
     File* file = storage_file_alloc(p->storage);
     McStorageResult result = McStorageIoError;
     uint8_t header[24];
@@ -343,6 +475,15 @@ static McStorageResult mc_checkpoint_read(McPersistence* p, uint8_t slot, McRunS
 McStorageResult mc_persistence_restore(McPersistence* p, McRunSnapshot* run) {
     if(!p || !p->scratch || p->slot >= MC_SAVE_SLOTS) return McStorageInvalid;
     return mc_checkpoint_read(p, p->slot, run);
+}
+
+McStorageResult
+    mc_persistence_migrate_run(McPersistence* p, const char* source, McRunSnapshot* run) {
+    if(p->slot >= MC_SAVE_SLOTS) return McStorageInvalid;
+    const McStorageResult result =
+        mc_migration_read(p, source, McFileCheckpoint0 + p->slot, mc_checkpoint_copy, run);
+    // An empty slot remains empty. Existing runs retain their generation and timestamp.
+    return result == McStorageOk ? mc_checkpoint_write(p, run, true) : result;
 }
 
 static McStorageResult mc_remove_family(McPersistence* p, uint8_t key) {
@@ -436,6 +577,7 @@ static void mc_history_free(McPersistence* p) {
     if(p->history) {
         mc_history_close(p->history);
         free(p->history);
+        p->history = NULL;
     }
 }
 
@@ -570,6 +712,11 @@ bool mc_persistence_history_pending(const McPersistence* p) {
 }
 bool mc_persistence_history_required(const McPersistence* p) {
     return p->history && (p->history->touching || p->history->phase == 4 || p->history->clearing);
+}
+bool mc_persistence_history_release(McPersistence* p) {
+    if(mc_persistence_history_required(p)) return false;
+    mc_history_free(p);
+    return true;
 }
 bool mc_persistence_history_clear(McPersistence* p) {
     McPaceHistory* h = mc_history_get(p);

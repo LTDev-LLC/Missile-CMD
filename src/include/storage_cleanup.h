@@ -3,6 +3,7 @@
 #include "persistence.h"
 
 #define MC_CLEANUP_ALLOCATION_BUDGET 4096U
+#define MC_VERSION_REVIEW_FILE       ".version-reviewed"
 
 typedef enum {
     McCleanupScanning = 0,
@@ -32,7 +33,7 @@ typedef struct {
     McCleanupState state;
     McStorageResult result;
     bool approved, limited;
-    bool selecting, migrating, migrated, resuming, verifying;
+    bool selecting, migrating, migrated, resuming, verifying, remembering;
     uint8_t validation;
     char path[512];
 } McCleanup;
@@ -41,6 +42,8 @@ bool mc_cleanup_candidate(const char* name);
 // SemVer precedence (build metadata breaks ties only when choosing a source).
 int mc_cleanup_version_compare(const char* left, const char* right);
 void mc_cleanup_init(McCleanup* cleanup, Storage* storage);
+bool mc_cleanup_reviewed(Storage* storage);
+void mc_cleanup_keep(McCleanup* cleanup);
 void mc_cleanup_deinit(McCleanup* cleanup);
 void mc_cleanup_step(McCleanup* cleanup);
 void mc_cleanup_approve(McCleanup* cleanup);

@@ -1,6 +1,6 @@
 # Missile CMD
 
-A pocket-sized missile-defense arcade game for Flipper Zero, inspired by the tension and clarity of classic command-center games.
+A missile-defense arcade game for Flipper Zero.
 
 [![Build, release and Pages](https://github.com/LTDev-LLC/Missile-CMD/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/LTDev-LLC/Missile-CMD/actions/workflows/release.yml?query=branch%3Amain)
 
@@ -12,82 +12,74 @@ A pocket-sized missile-defense arcade game for Flipper Zero, inspired by the ten
 
 ## Gameplay
 
-- Defend six cities and three missile batteries through increasingly dense waves of standard, fast, splitting, and evasive missiles.
-- Build defensive chain reactions and spend credits between waves on repairs, extra ammunition, larger defensive blasts, faster interceptors, or longer-lived explosions.
-- From wave 10 onward, face a deterministic director that announces Barrage, Velocity, Fast Swarm, Fracture, Focus Fire, or Overload before the next attack.
-- Save at safe points and resume the exact active wave, wave result, or repair state later.
-- Practice a failed wave from its original starting cities, ammo, upgrades, and random state.
-    - These single-wave retries preserve the original mode rules and do not update records or suspended saves. Existing saves remain loadable; saves without replay data gain exact practice at the next wave.
-- Track five high scores per difficulty plus overall personal records for score, wave, survival time, qualifying accuracy, chain depth, and perfect-wave streak.
-- Earn 15 cosmetic medals, track progress, and pin a goal from Records & Medals.
-- Practice in four interactive lessons and play daily or shared-seed challenges.
+- Defend six cities and three batteries against standard, fast, splitting, and evasive missiles.
+- Chain explosions and spend credits on repairs, ammunition, and upgrades between waves.
+- Face announced attack patterns from wave 10 onward.
+- Save and resume runs, or retry a failed wave without affecting records or saves.
+- Track high scores and personal records, earn 15 medals, and pin a goal.
 
 ## Modes and challenges
 
 | Mode | Rules |
 | :--- | :--- |
-| Classic | Standard six-city defense with a fresh seed. |
-| Daily | A shared seed for the day on your device clock, at Command difficulty. |
-| Seeded | Enter an eight-digit hexadecimal seed to share a challenge. |
-| Limited ammo | Start each wave with five shots per surviving battery. |
-| One city | Defend one city; the other five cannot be rebuilt. |
-| Barrage | Much shorter intervals between enemy launches. |
-| Perfect defense | Losing any city or battery immediately ends the run. |
+| Classic | Six-city defense with a fresh seed. |
+| Daily | The day's shared seed at Command difficulty, using your device clock. |
+| Seeded | Share a challenge with an eight-digit hexadecimal seed. |
+| Limited ammo | Five shots per surviving battery each wave. |
+| One city | Defend one city; the others cannot be rebuilt. |
+| Barrage | Shorter intervals between enemy launches. |
+| Perfect defense | Losing any city or battery ends the run. |
 | Endless Crisis | Start at wave 10 on Crisis difficulty. |
-| Training | Four repeatable, action-gated lessons: interception, chains, battery selection, then repairs and supplies. |
-| Practice | Start at waves 1-65,535; choose mixed, standard, fast, splitting, or evasive enemies; toggle unlimited ammo, half speed, and aiming aids. No records or suspended save. |
-| Campaign | Five missions with Standard, Barrage, Velocity, Fracture, and Focus Fire rules, ending in victory. |
-| Score attack | Three minutes of simulation time, with a separate mode best. Pause/workshop time is excluded. Losing every city ends the attempt early. |
-| Puzzles | Nine authored formations, two center-battery shots, completion tracking per difficulty, and optional hints. Victory requires intercepting every threat, including split children, without any ground impact. Choose a puzzle in mode options. |
-| Two players | Pass the device after player one's attempt. Both players receive the same five missions, seed and difficulty. Compare score, survival and accuracy; tied scores draw. Sessions are not suspended or entered in records. |
-| Evasive | Standard missiles become marked evasive missiles that change their target once during flight. |
+| Training | Four interactive lessons covering interception, chains, battery selection, and supplies. |
+| Practice | Choose the starting wave, enemies, ammo, speed, and aiming aids. No records or saves. |
+| Campaign | Five missions with different attack patterns. |
+| Score attack | Score as much as possible in three minutes of play; pauses and repairs don't count. |
+| Puzzles | Clear nine formations with two shots each and no ground impacts. Optional hints. |
+| Two players | Pass the device for matching five-mission attempts. Tied scores draw; no records or saves. |
+| Evasive | Marked missiles change their target once during flight. |
 
 ## Controls
 
-- **D-pad:** move the targeting cursor with smooth hold acceleration, or navigate menus. A guidance line connects the active battery to the crosshair.
-- **OK:** fire from the selected battery or confirm a menu choice.
-- **Hold OK:** open direct battery selection. While holding, tap Left, Up, or Right for the corresponding battery, or Down for Auto. Release OK to close without firing. Destroyed batteries cannot be selected; a locked empty battery refuses the shot.
-- **Back:** pause during a wave; return or continue on other screens.
-- **Long Back:** open the save-and-return confirmation during a run; Practice and Two players instead offer to end the session.
+| Input | Action |
+| --- | --- |
+| D-pad | Move the cursor or navigate menus. |
+| OK | Fire or confirm. |
+| Hold OK | Tap Left, Up, or Right to select a battery; Down selects Auto. Release without firing. |
+| Back | Pause during a wave; return or continue elsewhere. |
+| Long Back | Save-and-return confirmation, or end a Practice/Two players session. |
 
 ## Gameplay readouts
 
-For example, the top bar might show `W10 012450 H25000 A09`, and the bottom bar `T24 L10 C9 R9`.
+Example: `W10 012450 H25000 A09` above the playfield, `T24 L10 C9 R9` below.
 
-| Position | Label / example | Meaning |
-| --- | --- | --- |
-| Top | `W10` | Current wave: 10. |
-| Top | `012450` | Current run's score: 12,450 points. This number has no letter prefix. |
-| Top | `H25000` | Matching mode best, or the difficulty-table best for Classic/Seeded: 25,000 points. |
-| Top | `A09` | **Auto** battery selection; the automatically selected battery has 9 shots left. Auto picks the closest living battery with ammo to the crosshair horizontally. |
-| Top | `L09`, `C09`, `R09` | Manual selection of the **Left**, **Center**, or **Right** battery, followed by its remaining shots. `00` means that selected battery is empty. |
-| Top | `A--` | No battery is available to fire. The dashes replace the ammo number. |
-| Bottom | `T24` | 24 threats remain in this wave: missiles currently flying **plus** those still waiting to spawn. Splitting missiles can change this count. |
-| Bottom | `L10 C9 R9` | Shots remaining in the **Left**, **Center**, and **Right** batteries, respectively. An empty or destroyed battery shows `0`. |
-| Bottom | `LOW` | At most **3 shots total** remain across all batteries, including zero. |
+| Label | Meaning |
+| --- | --- |
+| `W10` | Wave 10. |
+| `012450` | Current score: 12,450. |
+| `H25000` | Mode best, or difficulty best for Classic/Seeded. |
+| `A09` | Auto-selected battery with 9 shots. Auto picks the nearest usable battery horizontally. |
+| `L09`, `C09`, `R09` | Manually selected Left, Center, or Right battery and its ammo. |
+| `A--` | No battery can fire. |
+| `T24` | Threats flying or waiting to spawn; splits can increase the count. |
+| `L10 C9 R9` | Ammo remaining in each battery; empty or destroyed batteries show zero. |
+| `LOW` | Three or fewer shots remain in total. |
 
 ## Settings
 
-- Sound and vibration
-- Slow, Normal, or Fast cursor movement
-- **Controls → Resume timer:** a three-second countdown before every round starts or play resumes (on by default)
-- Adaptive rendering (up to 30 FPS, idling when unchanged)
-- Battery Saver rendering (15 FPS cap while simulation remains 30 Hz)
-- **Display → Invert colors:** swap foreground and background throughout the app; the preference is saved (off by default)
-- Reduced flash and control-card preferences
-- Missile tails on/off for incoming missiles and fired interceptors (on by default)
-- Cursor acceleration on/off and a bold targeting cursor
-- Light or Normal vibration intensity, independently of vibration on/off
+- Sound, vibration, and vibration intensity.
+- Cursor speed, acceleration, and bold crosshair.
+- **Controls → Resume timer:** three-second countdown before starting or resuming (default: on).
+- Adaptive rendering up to 30 FPS, or Battery Saver at 15 FPS. Both keep simulation at 30 Hz.
+- **Display → Invert colors**, reduced flash, missile tails, and control-card preferences.
 
-## LED Notifications
+## LED notifications
 
-| Event | LED alert |
+| Event | Alert |
 | --- | --- |
-| Interceptor detonation, chain reaction, or impact on rubble | One short yellow flash |
+| Detonation, chain reaction, or rubble impact | One yellow flash |
 | City or battery destroyed | Two red flashes |
 | Game over | Three red flashes |
 | Wave cleared | Two green flashes |
-
 
 ## Screenshots
 
@@ -103,61 +95,48 @@ For example, the top bar might show `W10 012450 H25000 A09`, and the bottom bar 
 
 ## Install Missile CMD
 
+Requires a Flipper Zero with a microSD card and a build matching its firmware.
+
 ### USB web installer
 
-The [web installer](https://LTDev-LLC.github.io/Missile-CMD/) offers a release dropdown and
-Official, Unleashed, or Momentum builds available for that release. Use desktop Chrome
-or Edge, connect your Flipper with a USB data cable, and close qFlipper and the game first.
-Connect the device, review the firmware compatibility, then choose **Install Missile CMD**.
-The installer copies the app and matching help file (when that release includes one),
-checks both on the microSD card, and releases USB. Open **Apps → Games → Missile CMD**.
-Each release uses `apps_data/missile_cmd/<VERSION>/` for its help, settings, saves,
-scores, profile, and pace history. On startup, **Migrate** imports missing files from the
-newest older version containing user data, then prunes older version folders. Existing
-files in the current release take priority; its matching help file is preserved.
+1. Open the [web installer](https://LTDev-LLC.github.io/Missile-CMD/) in desktop Chrome or Edge.
+2. Connect your Flipper with a USB data cable. Close qFlipper and the game.
+3. Select a release and firmware, review compatibility, and choose **Install Missile CMD**.
+4. Open **Apps → Games → Missile CMD** on the device.
 
-Older releases without help remain installable as app-only releases. Their FAP API is
-shown, but firmware versions are marked unrecorded rather than inferred from the current
-SDK lock. Unknown firmware compatibility requires you to check the build yourself; a
-detected firmware-family or API-major mismatch blocks installation. You can also download
-the files directly when your browser does not support Web Serial.
+The installer checks the app and matching help file before finishing. Older app-only
+releases remain available; check compatibility yourself if their firmware version is
+unrecorded. Detected firmware-family or API-major mismatches block installation.
 
-The installer stages and checks both files before replacement, and restores the originals
-if replacement fails while USB is still available. If power or USB is lost during final
-replacement, `.web-backup` files retain the originals beside the app/help. Use qFlipper to
-restore each backup to its original name (keep a local copy first); reconnect and retry.
-Stale `.web-install` staging files are safely replaced on the next attempt.
+If an interrupted install leaves `.web-backup` files beside the app or help file,
+keep a local copy, then use qFlipper to restore each backup to its original name and retry.
 
-### Requirements
+### Manual installation
 
-- Flipper Zero with a microSD card
-- Official, Unleashed, or Momentum firmware matching the SDK used to build the app
-- A USB cable for developer installation
+Download the ZIP for your firmware and copy its `apps` and `apps_data` folders to the
+SD-card root. Open **Apps → Games → Missile CMD**.
 
-Download the ZIP matching your firmware and copy its `apps` and `apps_data` folders to the SD-card root. It contains `apps/Games/missile_cmd.fap` and `apps_data/missile_cmd/<VERSION>/help.bin`. The folder name is the exact value in `VERSION`, including any prerelease or build suffix. Then open **Apps → Games → Missile CMD**.
+For standalone downloads, put the FAP in `apps/Games/` and matching `help.bin` in
+`apps_data/missile_cmd/<VERSION>/`. The ZIP and installers include help automatically.
+The release asset `missile_cmd.fap` is the Official build.
 
-Standalone firmware-specific FAPs remain available; `missile_cmd.fap` is the Official release alias. The matching `help.bin` release asset supplies HUD explanations, lesson instructions, puzzle hints, medal criteria, debrief tips, and mode descriptions. Copy it into that release's data folder. The ZIP, USB uploader, and web installer do this automatically.
+### Version data
 
-The build generates the app version and data paths from `VERSION`; there is no separate
-data-directory version setting. Help is generated locally as `dist/<VERSION>/help.bin`.
-At startup, choose **Keep**, **Migrate**, or **Purge** when other version folders exist:
+Each release stores settings, saves, records, and help in `apps_data/missile_cmd/<VERSION>/`.
+When older data exists, choose:
 
-- **Keep** leaves those folders untouched and uses this release's saved data or defaults.
-- **Migrate** selects the newest older SemVer release with user data (legacy `vN` folders
-  are a fallback). It copies missing settings, all save slots, scores, profile, pace history,
-  backups, and other files, including nested folders. Releases containing only help are
-  skipped as sources. Existing current-version files win conflicts; old help files are
-  excluded. Each copied file is synced and read back before publication, and settings,
-  scores, profile, and all saves are checked with the current readers before pruning starts.
-  Copy or compatibility failures retain the old folders and offer **Retry** or **Keep**.
-  Interrupted copies can be retried on the next launch. Only versions older than the current
-  release are pruned, with the migration source removed last.
-- **Purge** deletes all listed other SemVer and legacy version folders without importing
-  their contents. The current release's folder is always excluded.
+- **Keep:** use this release's data or defaults and leave older folders untouched.
+- **Migrate:** carry forward the newest older data, preserve saved values and progress,
+  add defaults for new settings, create missing configuration files, and update supported formats.
+  Current-release data takes priority; originals are kept.
+- **Clean:** review older folders, then confirm **Delete** to remove them. **Cancel** is
+  selected by default; current, equivalent, and newer versions are protected.
 
-Version selection uses SemVer precedence, with a deterministic name ordering for equal
-versions with different build metadata. Equivalent or newer releases are not migration
-sources and are retained by **Migrate**.
+Keep and successful migrations are remembered. Failed migrations offer **Retry** or
+**Keep** and remain retryable at the next launch. Revisit these choices through
+**Settings → Data → Version data** from the title menu.
+
+## Development
 
 ### Build and install
 
@@ -176,13 +155,27 @@ Official is the default. Choose the firmware installed on your Flipper:
 | Unleashed | `make build FIRMWARE=unleashed` |
 | Momentum | `make build FIRMWARE=momentum` |
 
-Builds use the SDK versions and archive checksums in [`build-lock.json`](build-lock.json), uFBT 0.2.6, and toolchain 39. The first build downloads the selected archive; later builds verify the cached archive and every publisher-provided SDK file before reusing them. A modified SDK tree is restored from the verified archive.
+Builds use the SDKs and checksums in [`build-lock.json`](build-lock.json), uFBT 0.2.6,
+and toolchain 39. Downloads and cached SDK files are verified; modified SDKs are restored.
+Build commands support macOS and Linux.
 
-`make sdk-update FIRMWARE=unleashed` reinstalls that firmware's locked SDK, and `make sdk-status FIRMWARE=unleashed` reports the installed version and API. To override the lock locally, set an explicit release such as `SDK_VERSION=unlshd-092`. To fetch the newest release, use `make sdk-update FIRMWARE=unleashed SDK_VERSION=latest`; use `SDK_VERSION=latest` on subsequent commands to keep using that override. Defaults always return to the committed lock.
+| Command | Purpose |
+| --- | --- |
+| `make build-all` | Build all three firmware targets. |
+| `make sdk-status FIRMWARE=unleashed` | Show the installed SDK version and API. |
+| `make sdk-update FIRMWARE=unleashed` | Reinstall the locked SDK. |
+| `make repro-check FIRMWARE=official` | Compare two clean builds and record their hashes. |
 
-SDKs and build caches are isolated under `~/.cache/missile-cmd/ufbt/<firmware>`; set `SDK_ROOT` to change the parent directory. The compiler toolchain is shared from `~/.ufbt`, or `FBT_TOOLCHAIN_PATH` if set. Project `.env` files must not override those selected paths. These make targets run on macOS and Linux.
+Override the SDK with `SDK_VERSION=<release>` or `SDK_VERSION=latest`; repeat the override
+on subsequent commands. Commands without it return to the lock.
 
-`make build-all` builds all three targets in sequence. `make repro-check FIRMWARE=official` compares two clean builds, including packed FAPs, help files, and deterministic ZIP bundles, and records their hashes; it also supports the other two targets. Packed files are named `dist/missile_cmd-official.fap`, `dist/missile_cmd-unleashed.fap`, and `dist/missile_cmd-momentum.fap`. `dist/missile_cmd.fap` contains the most recent build. Each target's release, API, SDK and toolchain archive checksums, tool versions, and separate FAP/help/combined-installed size report is saved under `build_metadata/<firmware>/`.
+SDK caches live in `~/.cache/missile-cmd/ufbt/<firmware>` (`SDK_ROOT` overrides the parent).
+The shared toolchain uses `~/.ufbt` or `FBT_TOOLCHAIN_PATH`; project `.env` files must not
+override these paths.
+
+Builds produce firmware-specific FAPs and ZIPs in `dist/`; locally, `dist/missile_cmd.fap`
+is the most recent build. SDK, checksum, and size reports are in `build_metadata/<firmware>/`.
+`VERSION` controls the app and data-folder version; help is generated at `dist/<VERSION>/help.bin`.
 
 Connect a Flipper Zero over USB to build, upload, and launch the matching packed app:
 
@@ -192,7 +185,7 @@ make install FIRMWARE=unleashed
 make install FIRMWARE=momentum
 ```
 
-### Core tests
+### Checks
 
 ```sh
 make test
@@ -201,37 +194,33 @@ make screenshots-check
 make lint
 make format
 ```
+
 ## Releases
 
-The current release version is stored in [`VERSION`](VERSION) as SemVer. Every push to `main` runs the **Release** pipeline: validate the version, run tests, build and lint all three firmware targets, publish a release when `VERSION` changes, then publish the Pages installer. A failed build, test, or release blocks Pages. Other pushes refresh the installer after checks without creating another release. Branch pushes, pull requests, and scheduled SDK checks still use the **Build and test** workflow. Releases include the three firmware-specific FAPs, matching deterministic ZIP bundles, the optional help file, and `missile_cmd.fap` as an alias for the Official build.
+[`VERSION`](VERSION) sets the SemVer release number. Pushes to `main` run the **Release**
+pipeline: tests, builds and lint for all three firmwares, a release when the version
+changes, then the Pages installer. Failures block Pages. Branches, pull requests, and
+scheduled SDK checks use **Build and test**.
 
-Releases also include `install-manifest.json`, generated from the verified build reports.
-Its schema 2 records the app version, versioned data directory, actual firmware SDK
-versions, FAP APIs, installation paths, and SHA-256 hashes for each app/help pair. The web
-installer uses the selected release's manifest rather than the site's current `VERSION`,
-so older and newer releases always install help into their own matching folders.
+Releases contain firmware-specific FAPs and ZIPs, matching help when available, an Official
+`missile_cmd.fap` alias, and `install-manifest.json` with verified versions, paths, and hashes.
+The installer uses each release's manifest to install its matching files.
 
 ### Publishing the web installer
 
-In repository **Settings → Pages**, set **Source** to **GitHub Actions**. Pages runs as
-the final stage of the **Release** pipeline, after the build, tests, and any new release
-have succeeded. It uses the same source commit that passed the checks. Main pushes and
-release edits/publication/deletion run this pipeline; Pages has no independent trigger.
-To refresh after uploading assets to an existing release, manually run **Release** on
-`main` with **Publish VERSION as a release** unchecked. Leave it checked only when
-publishing an unused version. Releases created with `GITHUB_TOKEN` proceed directly to
-Pages within the same run. No external server or browser GitHub token
-is required. All releases are paginated and mirrored into the Pages artifact, avoiding
-cross-origin restrictions on GitHub release downloads; prereleases are labeled and the
-newest stable release is selected by default.
+Set repository **Settings → Pages → Source** to **GitHub Actions**. Pages publishes from
+the same checked commit at the end of **Release**. Main pushes and release changes trigger
+this pipeline. To refresh existing assets manually, run **Release** on `main` with
+**Publish VERSION as a release** unchecked; check it only for an unused version.
 
-For a private repository, the Actions token downloads release assets during the build.
-**A public Pages deployment makes the mirrored app/help binaries public even when the
-source repository is private.** Enable publishing only with that distribution intent;
-private-repository Pages also requires a GitHub plan that supports it. GitHub release
-notes and source links still require repository access.
+Release assets are mirrored into Pages, with the newest stable release selected by default.
+No external server or browser GitHub token is needed. **Public Pages makes mirrored binaries
+public even if the repository is private.** Private-repository Pages requires a supporting
+GitHub plan; source and release-note links still require repository access.
 
-For local development, with Node.js 22+ and an authenticated GitHub CLI:
+### Local installer development
+
+With Node.js 22+ and an authenticated GitHub CLI:
 
 ```sh
 make web-test
@@ -239,13 +228,11 @@ python3 tools/build_pages.py
 python3 -m http.server 8000 --directory build/pages --bind 127.0.0.1
 ```
 
-Open `http://localhost:8000`. The generator requires an empty output directory; remove
-only the generated `build/pages` directory before rebuilding, or supply a fresh
-`--output` directory. The site uses plain HTML/CSS/JavaScript with no runtime dependencies.
-Download integrity uses SHA-256; on-device verification uses the storage CLI's MD5 and
-file size. The stream tests simulate split responses, failed uploads, and disconnections;
-a real USB installation is still required to validate browser/firmware combinations.
+Open `http://localhost:8000`. Rebuilding requires an empty `build/pages` directory or a fresh
+`--output` path. The site uses plain HTML/CSS/JavaScript. Tests cover streaming, uploads, and
+disconnections; browser/firmware compatibility still needs a real USB installation.
 
 ## License
 
-Copyright (c) 2026 LTDev LLC. Source code and original project assets are licensed under the MIT License; see [`LICENSE`](LICENSE). Bundled host-renderer font data is covered by its [separate licenses](tests/FONT_LICENSES.md). The implementation uses the public official firmware API and does not copy third-party arcade assets.
+Copyright (c) 2026 LTDev LLC. [MIT License](LICENSE). Bundled host-renderer fonts have
+[separate licenses](tests/FONT_LICENSES.md).

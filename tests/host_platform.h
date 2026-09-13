@@ -41,6 +41,8 @@ typedef enum {
     HostStorageDirRead,
     HostStorageOperationCount
 } HostStorageOperation;
+// Count attempted storage operations, including injected failures.
+extern unsigned host_storage_calls[HostStorageOperationCount];
 // Fail the next matching storage operation once without affecting other operation types
 void host_fail_next(HostStorageOperation operation);
 // Skip successful matching operations before injecting one failure.

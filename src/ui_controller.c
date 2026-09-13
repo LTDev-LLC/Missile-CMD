@@ -413,7 +413,9 @@ static __attribute__((noinline)) void
             mc_toggle_setting(app, true);
         }
     } else if(mc_is_confirm_event(event)) {
-        if(app->ui.menu_index == McSettingsItemStorage) {
+        if(app->ui.menu_index == McSettingsItemVersionData) {
+            mc_app_open_version_data(app);
+        } else if(app->ui.menu_index == McSettingsItemStorage) {
             app->ui.detail_return_screen = McScreenSettings;
             app->ui.screen = McScreenStorage;
         } else if(app->ui.menu_index == McSettingsItemResetSettings) {
@@ -785,6 +787,19 @@ static __attribute__((noinline)) void mc_handle_screen_input(McApp* app, const I
     }
     switch(app->ui.screen) {
     case McScreenCleanup:
+        if(app->ui.cleanup_confirm) {
+            if(mc_is_back_event(event) || mc_is_long_back_event(event)) {
+                app->ui.cleanup_confirm = false;
+                app->ui.menu_index = 0;
+            } else if(mc_is_direction_event(event)) {
+                app->ui.menu_index ^= 1U;
+            } else if(mc_is_confirm_event(event)) {
+                if(app->ui.menu_index) app->cleanup_action = 2U;
+                app->ui.cleanup_confirm = false;
+                app->ui.menu_index = 0;
+            }
+            break;
+        }
         if(app->ui.cleanup_state == McCleanupScanning ||
            app->ui.cleanup_state == McCleanupPurging ||
            app->ui.cleanup_state == McCleanupMigrating ||
@@ -801,11 +816,18 @@ static __attribute__((noinline)) void mc_handle_screen_input(McApp* app, const I
                     app->ui.cleanup_can_migrate && app->ui.cleanup_state == McCleanupPrompt ? 3U :
                                                                                               2U,
                     event->key == InputKeyRight);
-        } else if(mc_is_confirm_event(event))
-            app->cleanup_action = !app->ui.menu_index                                     ? 1U :
-                                  app->ui.cleanup_state == McCleanupFailed                ? 3U :
-                                  app->ui.cleanup_can_migrate && app->ui.menu_index == 1U ? 4U :
-                                                                                            2U;
+        } else if(mc_is_confirm_event(event)) {
+            if(!app->ui.menu_index)
+                app->cleanup_action = 1U;
+            else if(app->ui.cleanup_state == McCleanupFailed)
+                app->cleanup_action = 3U;
+            else if(app->ui.cleanup_can_migrate && app->ui.menu_index == 1U)
+                app->cleanup_action = 4U;
+            else {
+                app->ui.cleanup_confirm = true;
+                app->ui.menu_index = 0;
+            }
+        }
         break;
     case McScreenPracticeSetup:
     case McScreenSettingsGroups:

@@ -69,14 +69,14 @@ void mc_storage_worker_execute(McStorageWorker* w) {
             const McCleanupReply reply = j->data.cleanup;
             McStorageResult result;
             if(c->validation == 0U)
-                result = mc_persistence_load_settings(p, &j->data.settings);
+                result = mc_persistence_migrate_settings(p, c->source->name, &j->data.settings);
             else if(c->validation == 1U)
-                result = mc_persistence_load_scores(p, &j->data.scores);
+                result = mc_persistence_migrate_scores(p, c->source->name, &j->data.scores);
             else if(c->validation == 2U)
-                result = mc_persistence_load_profile(p, &j->data.profile);
+                result = mc_persistence_migrate_profile(p, c->source->name, &j->data.profile);
             else {
                 p->slot = c->validation - 3U;
-                result = mc_persistence_restore(p, &run);
+                result = mc_persistence_migrate_run(p, c->source->name, &run);
             }
             j->data.cleanup = reply;
             mc_cleanup_validated(c, result);
@@ -84,20 +84,25 @@ void mc_storage_worker_execute(McStorageWorker* w) {
         McCleanupReply* r = &j->data.cleanup;
         r->requested_index = r->index;
         r->requested_offset = r->offset;
-        if(j->operation == McIoCleanupInit) mc_cleanup_init(c, p->storage);
-        if(r->action == 1U) mc_cleanup_deinit(c);
+        if(j->operation == McIoCleanupInit) {
+            furi_check(mc_persistence_history_release(p));
+            mc_cleanup_init(c, p->storage);
+            if(!r->manual && mc_cleanup_reviewed(p->storage)) c->state = McCleanupDone;
+        }
+        if(r->action == 1U) mc_cleanup_keep(c);
         if(r->action == 2U) mc_cleanup_approve(c);
         if(r->action == 3U) mc_cleanup_retry(c);
         if(r->action == 4U) mc_cleanup_migrate(c);
         if(r->action != 1U) mc_cleanup_step(c);
         if(r->action != 1U) mc_cleanup_migration_step(c, p->scratch);
-        r->state = r->action == 1U ? McCleanupDone : c->state;
+        r->state = c->state;
         r->count = c->count;
         r->remaining = c->remaining;
         r->approved = c->approved;
         r->limited = c->limited;
         r->can_migrate = c->source != NULL;
         r->migrating = c->migrating;
+        r->imported = c->migrated;
         snprintf(r->source, sizeof(r->source), "%.40s", c->source ? c->source->name : "");
         if(r->count)
             r->index %= r->count;

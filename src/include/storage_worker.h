@@ -39,7 +39,7 @@ typedef struct {
     uint16_t offset, length, requested_offset;
     uint8_t action;
     McCleanupState state;
-    bool approved, limited, can_migrate, migrating;
+    bool approved, limited, can_migrate, migrating, imported, manual;
     char name[41];
     char source[41];
 } McCleanupReply;

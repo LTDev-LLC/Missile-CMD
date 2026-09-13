@@ -77,6 +77,7 @@ enum {
     McSettingsItemWarnings,
     McSettingsItemClearPace,
     McSettingsItemInvertColors,
+    McSettingsItemVersionData,
     McSettingsItemCount,
 };
 

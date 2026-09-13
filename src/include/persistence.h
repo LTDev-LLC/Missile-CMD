@@ -44,6 +44,16 @@ McStorageResult
 McStorageResult
     mc_persistence_save_scores(McPersistence* persistence, const McScoreTables* scores);
 McStorageResult mc_persistence_save_profile(McPersistence* persistence, const McProfile* profile);
+// Recognized root records are migrated through codecs, not copied as opaque files.
+bool mc_persistence_migration_file(const char* name);
+McStorageResult
+    mc_persistence_migrate_settings(McPersistence* p, const char* source, McSettings* settings);
+McStorageResult
+    mc_persistence_migrate_scores(McPersistence* p, const char* source, McScoreTables* scores);
+McStorageResult
+    mc_persistence_migrate_profile(McPersistence* p, const char* source, McProfile* profile);
+McStorageResult
+    mc_persistence_migrate_run(McPersistence* p, const char* source, McRunSnapshot* run);
 _Static_assert(
     MC_PERSISTENCE_SCRATCH_SIZE >= MC_RUN_ENCODED_MAX_SIZE,
     "persistence scratch must fit maximum run");
@@ -65,6 +75,8 @@ McStorageResult mc_persistence_pace(McPersistence* p, const McGame* game, McPace
 McStorageResult mc_persistence_history_step(McPersistence* p);
 bool mc_persistence_history_clear(McPersistence* p);
 bool mc_persistence_history_pending(const McPersistence* p);
+// Discard optional in-memory maintenance before lending its heap allowance to version data.
+bool mc_persistence_history_release(McPersistence* p);
 void mc_persistence_slot_info(McPersistence* p, uint8_t slot, McSaveInfo* info);
 
 // Must finish before replacing the current run or slot

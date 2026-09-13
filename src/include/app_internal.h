@@ -43,9 +43,9 @@ typedef struct {
     uint32_t run_revision, run_identity, exit_started;
     uint32_t settings_revision, scores_revision, profile_revision;
     bool history_pending, history_required, clear_history, io_recovered;
-    bool cleanup_refresh;
+    bool cleanup_refresh, cleanup_requested, cleanup_management;
     McCleanup cleanup;
-    // Deferred cleanup request: 0 none, 1 keep, 2 purge, 3 retry
+    // Deferred cleanup request: 0 none, 1 keep, 2 purge, 3 retry, 4 import
     uint8_t cleanup_action;
     McPace pace;
     McWaveStart wave_start;
@@ -121,6 +121,7 @@ void mc_app_select_slot(McApp* app, uint8_t slot);
 void mc_app_clear_pace(McApp* app);
 
 void mc_app_cleanup_select(McApp* app, bool next);
+void mc_app_open_version_data(McApp* app);
 
 void mc_app_capture_wave(McApp* app);
 

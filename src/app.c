@@ -17,6 +17,9 @@
 #define MC_SAVE_DEBOUNCE_MS     750U
 #define MC_STORAGE_NOTICE_MS    5000U
 
+static bool mc_app_exit_required(const McApp* app);
+static bool mc_app_version_data_ready(const McApp* app);
+
 // Signed subtraction handles tick-counter wrap for nearby deadlines
 static bool mc_tick_reached(uint32_t now, uint32_t deadline) {
     return (int32_t)(now - deadline) >= 0;
@@ -661,9 +664,17 @@ static void mc_app_complete_io(McApp* app, uint32_t now) {
         }
         if(r->state == McCleanupDone) {
             app->ui.help = (McHelpPage){.id = McHelpNoPage};
-            app->ui.screen = McScreenLoading;
-            app->ui.menu_index = 0;
-            app->startup_step = 2U;
+            if(app->cleanup_management && !r->imported) {
+                app->ui.screen = McScreenSettings;
+                app->ui.menu_index = McSettingsItemVersionData;
+                app->startup_step = 0;
+                app->cleanup_management = false;
+                app->pending_io |= McPendingIoHistory;
+            } else {
+                app->ui.screen = McScreenLoading;
+                app->ui.menu_index = 0;
+                app->startup_step = 2U;
+            }
         } else if(r->state == McCleanupFailed) {
             if(app->ui.menu_index > 1U) app->ui.menu_index = 1U;
             app->ui.storage_item = "Version folder cleanup";
@@ -704,7 +715,13 @@ static void mc_app_complete_io(McApp* app, uint32_t now) {
             if(j->startup) {
                 mc_app_refresh_high_score(app);
                 app->ui.score_difficulty = app->ui.settings.difficulty;
-                app->ui.screen = McScreenTitle;
+                app->ui.screen = app->cleanup_management ? McScreenSettings : McScreenTitle;
+                if(app->cleanup_management) {
+                    app->ui.menu_index = McSettingsItemVersionData;
+                    app->cleanup_management = false;
+                    app->slot_scan = 0;
+                    app->pending_io |= McPendingIoSlots;
+                }
                 app->pending_io |= McPendingIoHistory;
             }
         }
@@ -782,6 +799,24 @@ static __attribute__((noinline)) bool mc_app_process_io(McApp* app, uint32_t now
         state = McIoIdle;
         changed = true;
     }
+    if(app->cleanup_requested) {
+        if(app->ui.screen != McScreenSettings || app->ui.menu_index != McSettingsItemVersionData ||
+           app->ui.exit_pending) {
+            app->cleanup_requested = false;
+        } else if(state == McIoIdle && mc_app_version_data_ready(app)) {
+            app->cleanup_requested = false;
+            app->cleanup_management = true;
+            // Writes are settled. Obsolete reads and optional history can be restarted later.
+            app->pending_io = app->failed_io = McPendingIoNone;
+            app->startup_step = 1;
+            app->ui.cleanup_state = McCleanupScanning;
+            app->ui.cleanup_confirm = false;
+            app->ui.cleanup_index = app->ui.cleanup_offset = 0;
+            app->ui.menu_index = 0;
+            app->ui.screen = McScreenCleanup;
+            changed = true;
+        }
+    }
     mc_help_refresh(&app->ui.common, &app->ui.game);
     furi_mutex_release(app->mutex);
     if(state != McIoIdle || app->ui.exit_discard) return changed;
@@ -795,6 +830,7 @@ static __attribute__((noinline)) bool mc_app_process_io(McApp* app, uint32_t now
         static const McIoOperation startup[] = {
             McIoCleanupInit, McIoLoadSettings, McIoLoadScores, McIoLoadProfile, McIoLoadRun};
         j->operation = startup[app->startup_step - 1U];
+        if(j->operation == McIoCleanupInit) j->data.cleanup.manual = app->cleanup_management;
     } else if(app->ui.screen == McScreenCleanup) {
         if(app->cleanup_action || app->cleanup_refresh ||
            app->ui.cleanup_state == McCleanupScanning ||
@@ -931,6 +967,23 @@ static bool mc_app_exit_required(const McApp* app) {
            app->history_required || app->clear_history;
 }
 
+void mc_app_open_version_data(McApp* app) {
+    // Runtime import reloads persistent state, so only title-menu settings may enter.
+    if(app->ui.settings_return_screen != McScreenTitle) return;
+    app->cleanup_requested = true;
+    mc_app_flush_settings(app);
+    mc_app_queue_dirty(app, true);
+    app->retry_due_tick = furi_get_tick();
+}
+
+static bool mc_app_version_data_ready(const McApp* app) {
+    const McPendingIo writes = McPendingIoSettings | McPendingIoScores | McPendingIoProfile |
+                               McPendingIoRunSave | McPendingIoRunDelete | McPendingIoPaceSave;
+    return !((app->pending_io | app->failed_io) & writes) && !app->settings_dirty &&
+           !app->scores_dirty && !app->profile_dirty && !app->run_dirty &&
+           !app->history_required && !app->clear_history;
+}
+
 // Use the earliest active deadline so waiting for input cannot delay simulation, drawing, or saves
 static uint32_t mc_app_wait_timeout(
     const McApp* app,
@@ -940,6 +993,7 @@ static uint32_t mc_app_wait_timeout(
     const unsigned state = atomic_load_explicit(&app->worker.state, memory_order_acquire);
     if(state == McIoComplete || state == McIoStopped) return 0;
     if(app->startup_step && state == McIoIdle) return 0;
+    if(app->cleanup_requested && state == McIoIdle && mc_app_version_data_ready(app)) return 0;
     if(app->ui.screen == McScreenCleanup && state == McIoIdle &&
        (app->cleanup_action || app->cleanup_refresh ||
         app->ui.cleanup_state == McCleanupScanning || app->ui.cleanup_state == McCleanupPurging ||

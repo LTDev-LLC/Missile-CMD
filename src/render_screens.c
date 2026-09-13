@@ -732,15 +732,21 @@ static __attribute__((noinline)) void
 
 static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
     mc_render_heading(canvas, 1, "VERSION DATA");
+    if(model->cleanup_confirm) {
+        mc_render_printf(
+            canvas, 16, "Delete %lu older folders?", (unsigned long)model->cleanup_count);
+        mc_render_centered(canvas, 28, "Their saves will be lost");
+        mc_render_centered(canvas, 38, "Current / newer kept");
+        mc_render_menu_item(canvas, 8, 54, 54, "Cancel", model->menu_index == 0);
+        mc_render_menu_item(canvas, 68, 54, 52, "Delete", model->menu_index == 1);
+        return;
+    }
     if(model->cleanup_state == McCleanupScanning) {
         mc_render_centered(canvas, 27, "Checking data folders...");
         return;
     }
     if(model->cleanup_state == McCleanupPurging) {
-        mc_render_centered(
-            canvas,
-            23,
-            model->cleanup_migrating ? "Pruning older folders" : "Deleting approved folders");
+        mc_render_centered(canvas, 23, "Deleting older folders");
         mc_render_printf(
             canvas, 37, "%lu folders remaining", (unsigned long)model->cleanup_remaining);
         return;
@@ -750,8 +756,8 @@ static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
             canvas,
             23,
             model->cleanup_state == McCleanupMigrating ? "Copying and verifying..." :
-                                                         "Checking settings / saves");
-        mc_render_centered(canvas, 37, "Old data kept until ready");
+                                                         "Updating settings / saves");
+        mc_render_centered(canvas, 37, "Original folders kept");
         return;
     }
     const bool migrate = model->cleanup_can_migrate && model->cleanup_state == McCleanupPrompt;
@@ -775,7 +781,7 @@ static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
         mc_render_printf(canvas, 21, "%.20s", model->cleanup_source);
         if(strlen(model->cleanup_source) > 20U)
             mc_render_centered(canvas, 29, model->cleanup_source + 20U);
-        mc_render_centered(canvas, 37, "Copy missing; prune old");
+        mc_render_centered(canvas, 37, "Upgrade; keep originals");
     } else {
         mc_render_printf(
             canvas,
@@ -790,7 +796,7 @@ static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
         mc_render_centered(
             canvas,
             37,
-            model->menu_index ? "Permanently delete all?" : "Keep all version folders");
+            model->menu_index ? "Review older-folder cleanup" : "Keep all version folders");
     }
     mc_render_menu_item(
         canvas, migrate ? 1 : 10, 54, migrate ? 34 : 50, "Keep", model->menu_index == 0U);
@@ -800,7 +806,7 @@ static void mc_draw_cleanup(Canvas* canvas, const McRenderSnapshot* model) {
         migrate ? 89 : 68,
         54,
         migrate ? 38 : 50,
-        model->cleanup_state == McCleanupFailed ? "Retry" : "Purge",
+        model->cleanup_state == McCleanupFailed ? "Retry" : "Clean",
         model->menu_index == (migrate ? 2U : 1U));
     mc_render_centered(canvas, 57, "Up/Down View  Back Keep");
 }

@@ -55,8 +55,10 @@ uint32_t host_redraws, host_sim_at_pause[4], host_pause_count;
 // Clear virtual files, scripted input, injected failures, and observations between tests
 static void host_reset_threads(void);
 unsigned host_random_calls;
+unsigned host_storage_calls[HostStorageOperationCount];
 void host_reset(void) {
     host_random_calls = 0;
+    memset(host_storage_calls, 0, sizeof(host_storage_calls));
     host_reset_threads();
     memset(files, 0, sizeof(files));
     files[0].exists = files[0].directory = true;
@@ -105,6 +107,7 @@ void host_fail_operation_after(HostStorageOperation operation, unsigned count) {
 }
 // Consume a one-shot fault only when the requested storage operation matches
 static bool fail_next(HostStorageOperation operation) {
+    host_storage_calls[operation]++;
     if(fail_operation != (int)operation) return false;
     if(fail_operation_skip) {
         fail_operation_skip--;
