@@ -13,6 +13,7 @@ bool cleanup_approved, cleanup_limited, cleanup_can_migrate, cleanup_migrating;
 bool cleanup_confirm;
 McSettings settings;
 McScreen screen;
+McInputRecovery input_recovery;
 McScreen settings_return_screen;
 McScreen scores_return_screen;
 McScreen detail_return_screen;

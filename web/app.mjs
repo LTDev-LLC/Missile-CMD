@@ -18,6 +18,14 @@ function status(message, kind = '') {
 function refresh() {
     const build = selectedBuild();
     const check = compatibility(device, build);
+    const recovery = connection?.recovery || [];
+    $('recovery').hidden = !recovery.length;
+    $('recovery-files').replaceChildren(...recovery.map((file) => {
+        const item = document.createElement('li');
+        item.textContent = file.name;
+        return item;
+    }));
+    $('restore').disabled = busy || !connection || connection.failure || !recovery.length;
     $('release').disabled = busy || !releases.length;
     $('firmware').disabled = busy || !selectedRelease();
     $('connect').disabled = busy || !supported || Boolean(connection) || !build;
@@ -26,7 +34,7 @@ function refresh() {
     $('compatibility').textContent = check.message;
     $('confirm-row').hidden = !check.confirm;
     $('confirm').disabled = busy;
-    $('install').disabled = busy || !connection || connection.failure || !build || check.blocked || (check.confirm && !$('confirm').checked);
+    $('install').disabled = busy || !connection || connection.failure || !connection.recoveryChecked || recovery.length > 0 || !build || check.blocked || (check.confirm && !$('confirm').checked);
 }
 
 function addLink(label, href, parent) {
@@ -60,7 +68,9 @@ function showBuild() {
         addLink('Release notes ↗', selectedRelease().url, $('downloads'));
         if (build.bundle_url) addLink('Download ZIP', build.bundle_url, $('downloads'));
         else for (const file of build.files) addLink(file.name.endsWith('.fap') ? 'Download FAP' : 'Download help', file.url, $('downloads'));
-        status('Ready when you are. Connect your Flipper to continue.');
+        status(connection?.recovery.length ? 'Restore the listed backups before installing.'
+            : connection ? 'Connected. Review the build, then install.'
+                : 'Ready when you are. Connect your Flipper to continue.');
     }
     refresh();
 }
@@ -103,7 +113,6 @@ $('connect').addEventListener('click', async () => {
         connection = candidate;
         $('device').textContent = `${FIRMWARE_NAMES[device.family] || 'Firmware'} ${device.version} · microSD ready`;
         showRelease();
-        status('Connected. Review the build, then install.');
     } catch (error) {
         await candidate?.close();
         connection = null;
@@ -117,6 +126,7 @@ $('connect').addEventListener('click', async () => {
 });
 
 $('disconnect').addEventListener('click', async () => {
+    if (busy) return;
     busy = true;
     refresh();
     await connection?.close();
@@ -127,6 +137,27 @@ $('disconnect').addEventListener('click', async () => {
     busy = false;
     status('Disconnected. You can unplug your Flipper.');
     refresh();
+});
+
+$('restore').addEventListener('click', async () => {
+    if ($('restore').disabled || busy) return;
+    const active = connection;
+    busy = true;
+    refresh();
+    try {
+        await active.restoreBackups((message) => status(message));
+        status('Backups restored and verified. Reconnect, review your build, then choose Install Missile CMD.', 'success');
+    } catch (error) {
+        status(`${error.message} Reconnect to retry recovery.`, 'error');
+    } finally {
+        await active.close();
+        connection = null;
+        device = null;
+        $('device').textContent = 'Disconnected · USB connection released';
+        $('confirm').checked = false;
+        busy = false;
+        refresh();
+    }
 });
 
 $('install').addEventListener('click', async () => {
@@ -143,13 +174,15 @@ $('install').addEventListener('click', async () => {
         const files = await Promise.all(build.files.map((file) => fetchFile(file)));
         const total = files.reduce((sum, file) => sum + file.size, 0);
         let sent = 0;
-        await active.install(files, (bytes, message) => {
+        const result = await active.install(files, (bytes, message) => {
             sent += bytes;
             $('progress').value = Math.min(95, sent / total * 95);
             if (message) status(message);
         }, build.data_version ?? null);
         $('progress').value = 100;
-        status(`${release.tag} installed and verified${files.length > 1 ? ', including help' : ''}. Open Apps → Games → Missile CMD on your Flipper.`, 'success');
+        const warning = result.cleanupWarnings.length
+            ? ' Some backups could not be removed. Reconnect for recovery before another installation.' : '';
+        status(`${release.tag} installed and verified${files.length > 1 ? ', including help' : ''}. Open Apps → Games → Missile CMD on your Flipper.${warning}`, warning ? '' : 'success');
     } catch (error) {
         status(error.message, 'error');
     } finally {

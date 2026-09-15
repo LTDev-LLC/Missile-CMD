@@ -66,6 +66,10 @@ void mc_app_refresh_high_score(McApp* app) {
 
 // Cache HUD text and aim estimates by their inputs so drawing consumes prepared values
 void mc_app_refresh_render_cache(McApp* app) {
+    if(app->input_batch) return;
+#ifdef MC_HOST_TEST
+    mc_host_render_refreshes++;
+#endif
     const McGame* game = &app->ui.game;
     const int8_t selected = mc_game_selected_battery(game);
     uint16_t aim = 0U;
@@ -280,6 +284,7 @@ void mc_app_start_new_run(McApp* app, bool allow_control_card) {
     app->pending_io &= (McPendingIo)~previous;
     app->failed_io &= (McPendingIo)~previous;
     app->run_dirty = false;
+    app->ui.input_recovery = McInputRecoveryNone;
     app->held_directions = 0U;
     app->cursor_direction_x = 0;
     app->cursor_direction_y = 0;
@@ -591,6 +596,7 @@ void mc_app_cleanup_select(McApp* app, bool next) {
 static void mc_app_publish_run(McApp* app, const McIoJob* j) {
     mc_feedback_stop(&app->feedback);
     app->ui.game = j->data.run.game;
+    app->ui.input_recovery = McInputRecoveryNone;
     app->wave_start = j->data.run.wave;
     app->ui.has_wave_start = app->wave_start.size != 0;
     app->ui.wave_practice = false;
@@ -1070,26 +1076,60 @@ wake:
     furi_thread_flags_set(app->worker.owner, MC_WAKE_INPUT);
 }
 
-static bool mc_app_reconcile_input(McApp* app) {
-    unsigned state = atomic_load(&app->input_overflowed);
+// The caller owns the render mutex while publishing input recovery state.
+static bool mc_app_reconcile_input_locked(McApp* app) {
+    const unsigned state = atomic_load(&app->input_overflowed);
     if(!state) return false;
     if(state == 1U) {
         furi_message_queue_reset(app->input_queue);
         atomic_store(&app->admitted_keys, 0U);
-        furi_mutex_acquire(app->mutex, FuriWaitForever);
         app->held_directions = 0U;
         app->ui.battery_overlay = false;
         mc_app_direction_changed(app, false);
-        if(app->ui.screen == McScreenPlaying) {
+        if(app->ui.screen == McScreenPlaying || app->ui.screen == McScreenPaused) {
             app->ui.screen = McScreenPaused;
             app->ui.menu_index = 0;
+            app->ui.input_recovery = McInputRecoveryHeld;
         }
         app->pending_changes |= McGameChangeAll;
-        furi_mutex_release(app->mutex);
         atomic_store(&app->input_overflowed, 2U);
     }
-    if(!atomic_load(&app->physical_keys)) atomic_store(&app->input_overflowed, 0U);
+    if(!atomic_load(&app->physical_keys)) {
+        if(app->ui.input_recovery == McInputRecoveryHeld) {
+            app->ui.input_recovery = McInputRecoveryReady;
+            app->pending_changes |= McGameChangeAll;
+        }
+        atomic_store(&app->input_overflowed, 0U);
+    }
     return true;
+}
+static bool mc_app_reconcile_input(McApp* app) {
+    if(!atomic_load(&app->input_overflowed)) return false;
+    furi_mutex_acquire(app->mutex, FuriWaitForever);
+    const bool reconciled = mc_app_reconcile_input_locked(app);
+    furi_mutex_release(app->mutex);
+    return reconciled;
+}
+
+// Publish one complete input batch, including caches, before drawing can take a snapshot.
+static bool mc_app_process_input_batch(McApp* app, InputEvent* event) {
+    bool immediate_redraw = false;
+    furi_mutex_acquire(app->mutex, FuriWaitForever);
+    app->input_batch = true;
+    for(unsigned batch = 0; batch < 8U; batch++) {
+        if(mc_app_reconcile_input_locked(app)) break;
+        const McScreen prior_screen = app->ui.screen;
+        mc_app_handle_input(app, event);
+        immediate_redraw |= app->ui.screen != prior_screen || app->ui.screen != McScreenPlaying;
+        if(batch + 1U == 8U || furi_message_queue_get(app->input_queue, event, 0U) != FuriStatusOk)
+            break;
+    }
+    mc_app_reconcile_input_locked(app);
+    if(immediate_redraw) app->pending_changes |= McGameChangeAll;
+    app->input_batch = false;
+    mc_app_refresh_render_cache(app);
+    furi_mutex_release(app->mutex);
+    return immediate_redraw;
 }
 static FuriStatus mc_app_get_input(McApp* app, InputEvent* event, uint32_t timeout) {
     if(mc_app_reconcile_input(app)) return FuriStatusErrorTimeout;
@@ -1218,20 +1258,8 @@ int32_t mc_app_run(void) {
         const uint32_t elapsed = now - previous_tick;
         previous_tick = now;
 
-        bool immediate_redraw = false;
-        for(unsigned batch = 0; batch < 8U && input_status == FuriStatusOk; batch++) {
-            if(mc_app_reconcile_input(app)) break;
-            furi_mutex_acquire(app->mutex, FuriWaitForever);
-            const McScreen prior_screen = app->ui.screen;
-            mc_app_handle_input(app, &event);
-            immediate_redraw |= app->ui.screen != prior_screen ||
-                                app->ui.screen != McScreenPlaying;
-            if(immediate_redraw) app->pending_changes |= McGameChangeAll;
-            mc_app_refresh_render_cache(app);
-            furi_mutex_release(app->mutex);
-            if(batch + 1U < 8U)
-                input_status = furi_message_queue_get(app->input_queue, &event, 0U);
-        }
+        const bool immediate_redraw = input_status == FuriStatusOk &&
+                                      mc_app_process_input_batch(app, &event);
 
         furi_mutex_acquire(app->mutex, FuriWaitForever);
         const bool playing = app->ui.screen == McScreenPlaying;
@@ -1304,6 +1332,7 @@ void mc_app_retry(McApp* app, bool random_seed) {
     mc_app_start_new_run(app, false);
 }
 void mc_app_continue(McApp* app) {
+    app->ui.input_recovery = McInputRecoveryNone;
     mc_app_clear_directions(app);
     app->ui.countdown_ticks = app->ui.settings.resume_countdown ? 3U * MC_TICKS_PER_SECOND : 0U;
     app->ui.screen = McScreenPlaying;

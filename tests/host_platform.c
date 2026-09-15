@@ -55,9 +55,12 @@ uint32_t host_redraws, host_sim_at_pause[4], host_pause_count;
 // Clear virtual files, scripted input, injected failures, and observations between tests
 static void host_reset_threads(void);
 unsigned host_random_calls;
+unsigned mc_host_render_refreshes;
+size_t mc_host_snapshot_bytes;
 unsigned host_storage_calls[HostStorageOperationCount];
 void host_reset(void) {
-    host_random_calls = 0;
+    host_random_calls = mc_host_render_refreshes = 0;
+    mc_host_snapshot_bytes = 0;
     memset(host_storage_calls, 0, sizeof(host_storage_calls));
     host_reset_threads();
     memset(files, 0, sizeof(files));

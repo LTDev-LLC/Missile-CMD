@@ -103,11 +103,24 @@ void mc_render_row(Canvas* canvas, int y, const char* text, bool selected) {
 
 void mc_render_snapshot(McRenderSnapshot* snapshot, const McUiModel* model) {
     snapshot->common = model->common;
-    snapshot->game = model->game;
-    if(model->screen != McScreenPlaying) {
+    const size_t scalar_offset = offsetof(McGame, stats);
+    if(model->screen == McScreenPlaying) {
+        snapshot->game = model->game;
+    } else {
+        memcpy(
+            (uint8_t*)&snapshot->game + scalar_offset,
+            (const uint8_t*)&model->game + scalar_offset,
+            sizeof(McGame) - scalar_offset);
         snapshot->scores = model->scores;
         snapshot->profile = model->profile;
     }
+#ifdef MC_HOST_TEST
+    mc_host_snapshot_bytes =
+        sizeof(McUiCommon) +
+        (model->screen == McScreenPlaying ?
+             sizeof(McGame) :
+             sizeof(McGame) - scalar_offset + sizeof(McScoreTables) + sizeof(McProfile));
+#endif
 }
 
 void mc_render_lines(Canvas* canvas, int x, int y, int step, uint8_t count, const char* text) {

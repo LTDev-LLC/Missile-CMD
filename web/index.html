@@ -61,6 +61,12 @@
             <button id="connect" class="secondary" disabled>Connect Flipper Zero</button>
             <p id="device" class="device" aria-live="polite">No device connected</p>
             <button id="disconnect" class="text-button" hidden>Disconnect</button>
+            <div id="recovery" class="notice" hidden>
+                <h3>Restore interrupted installation</h3>
+                <p>Backup files were found. Restore them before installing, or disconnect to leave them in place.</p>
+                <ul id="recovery-files"></ul>
+                <button id="restore" class="secondary" disabled>Restore backups</button>
+            </div>
             <div class="divider"></div>
             <div class="step"><span class="step-number">03</span>
                 <div>

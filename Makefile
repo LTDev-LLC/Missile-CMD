@@ -5,7 +5,7 @@ export FIRMWARE
 
 CORE_SOURCES = $(shell python3 tools/sources.py core)
 UI_SOURCES = $(shell python3 tools/sources.py ui)
-TEST_FLAGS = -std=c11 -Wall -Wextra -Werror -Isrc/include -Ibuild/generated $(TEST_SANITIZERS)
+TEST_FLAGS = -DMC_HOST_TEST -std=c11 -Wall -Wextra -Werror -Isrc/include -Ibuild/generated $(TEST_SANITIZERS)
 
 all: build
 

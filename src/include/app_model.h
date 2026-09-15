@@ -43,6 +43,13 @@ enum {
     McScreenExiting,
 };
 
+typedef uint8_t McInputRecovery;
+enum {
+    McInputRecoveryNone = 0,
+    McInputRecoveryHeld,
+    McInputRecoveryReady,
+};
+
 typedef uint8_t McConfirmAction;
 enum {
     McConfirmNone = 0,

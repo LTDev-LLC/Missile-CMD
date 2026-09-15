@@ -527,6 +527,184 @@ static void test_callback_battery_gestures(void) {
     mc_app_free(app);
 }
 
+// Recovery ignores the discarded gesture and resumes only after a fresh OK tap.
+static void test_input_recovery_pause(void) {
+    for(unsigned countdown = 0; countdown < 2; countdown++) {
+        host_reset();
+        McApp* app = test_app_alloc();
+        app->ui.settings.resume_countdown = countdown;
+        mc_game_start_run(&app->ui.game, McDifficultyCommand, 42);
+        app->ui.screen = McScreenPlaying;
+        mc_app_refresh_render_cache(app);
+        const uint32_t before = mc_game_state_hash(&app->ui.game);
+        for(unsigned n = 0; n <= MC_INPUT_QUEUE_CAPACITY; n++)
+            callback(app, InputKeyOk, InputTypePress, n);
+        callback(app, InputKeyLeft, InputTypePress, 34);
+        drain_input(app);
+        assert(app->ui.input_recovery == McInputRecoveryHeld);
+        assert(app->ui.screen == McScreenPaused);
+        callback(app, InputKeyOk, InputTypeRelease, 35);
+        callback(app, InputKeyOk, InputTypeShort, 36);
+        drain_input(app);
+        assert(app->ui.input_recovery == McInputRecoveryHeld);
+        app->pending_changes = McGameChangeNone;
+        callback(app, InputKeyLeft, InputTypeRelease, 37);
+        drain_input(app);
+        assert(app->ui.input_recovery == McInputRecoveryReady);
+        assert(app->pending_changes == McGameChangeAll);
+        callback(app, InputKeyOk, InputTypeShort, 38);
+        callback(app, InputKeyLeft, InputTypeLong, 39);
+        callback(app, InputKeyBack, InputTypePress, 40);
+        callback(app, InputKeyBack, InputTypeRelease, 41);
+        callback(app, InputKeyBack, InputTypeShort, 42);
+        drain_input(app);
+        assert(app->ui.screen == McScreenPaused);
+        callback(app, InputKeyOk, InputTypePress, 43);
+        callback(app, InputKeyOk, InputTypeRelease, 44);
+        callback(app, InputKeyOk, InputTypeShort, 45);
+        drain_input(app);
+        assert(app->ui.screen == McScreenPlaying);
+        assert(app->ui.input_recovery == McInputRecoveryNone);
+        assert(mc_game_state_hash(&app->ui.game) == before);
+        finish_countdown(app);
+        send(app, InputKeyBack, InputTypeShort);
+        assert(app->ui.screen == McScreenPaused);
+        assert(app->ui.input_recovery == McInputRecoveryNone);
+        test_io(app, 0);
+        // A new run, including its control card, must not inherit a stale notice.
+        app->ui.input_recovery = McInputRecoveryReady;
+        mc_app_start_new_run(app, true);
+        assert(app->ui.input_recovery == McInputRecoveryNone);
+        test_io(app, 0);
+        app->ui.input_recovery = McInputRecoveryReady;
+        mc_app_confirm(app, McConfirmAbandonRun, McScreenPaused);
+        app->ui.menu_index = 1;
+        send(app, InputKeyOk, InputTypeShort);
+        assert(app->ui.screen == McScreenTitle);
+        assert(app->ui.input_recovery == McInputRecoveryNone);
+        mc_app_free(app);
+    }
+}
+
+static void test_input_batch_render_cache(void) {
+    host_reset();
+    McApp* app = test_app_alloc();
+    mc_game_start_mode(&app->ui.game, McDifficultyCommand, 42, McModePractice);
+    app->ui.screen = McScreenPlaying;
+    app->ui.settings.practice_aids = true;
+    mc_app_refresh_render_cache(app);
+    McApp baseline_app = *app;
+    McApp* reference = &baseline_app;
+    const InputEvent events[] = {
+        {.key = InputKeyRight, .type = InputTypePress},
+        {.key = InputKeyRight, .type = InputTypeRelease},
+        {.key = InputKeyOk, .type = InputTypeShort},
+        {.key = InputKeyLeft, .type = InputTypeShort},
+        {.key = InputKeyOk, .type = InputTypeShort},
+        {.key = InputKeyUp, .type = InputTypePress},
+        {.key = InputKeyUp, .type = InputTypeRelease},
+        {.key = InputKeyOk, .type = InputTypeShort},
+        {.key = InputKeyBack, .type = InputTypeShort},
+    };
+    for(unsigned n = 1; n < 9; n++)
+        assert(furi_message_queue_put(app->input_queue, &events[n], 0) == FuriStatusOk);
+    const unsigned prior = mc_host_render_refreshes;
+    InputEvent event = events[0];
+    mc_app_process_input_batch(app, &event);
+    assert(mc_host_render_refreshes == prior + 1);
+    assert(furi_message_queue_get_space(app->input_queue) == MC_INPUT_QUEUE_CAPACITY - 1);
+    const unsigned baseline = mc_host_render_refreshes;
+    for(unsigned n = 0; n < 8; n++) {
+        mc_app_handle_input(reference, &events[n]);
+        mc_app_refresh_render_cache(reference);
+    }
+    assert(mc_host_render_refreshes == baseline + 8);
+    assert(!memcmp(&app->ui, &reference->ui, sizeof(app->ui)));
+    Canvas expected = {0}, actual = {0};
+    mc_view_draw_callback(&expected, reference);
+    mc_view_draw_callback(&actual, app);
+    assert(!memcmp(expected.pixels, actual.pixels, sizeof(expected.pixels)));
+    // The ninth event starts a new bounded batch and transitions to pause.
+    assert(furi_message_queue_get(app->input_queue, &event, 0) == FuriStatusOk);
+    const unsigned last = mc_host_render_refreshes;
+    assert(mc_app_process_input_batch(app, &event));
+    assert(app->ui.screen == McScreenPaused && mc_host_render_refreshes == last + 1);
+    test_io(app, 0);
+    // A nested transition's refresh is deferred to the same publication point.
+    mc_app_confirm(app, McConfirmRestartRun, McScreenPaused);
+    app->ui.menu_index = 1;
+    event = (InputEvent){.key = InputKeyOk, .type = InputTypeShort};
+    const unsigned restart = mc_host_render_refreshes;
+    mc_app_process_input_batch(app, &event);
+    assert(mc_host_render_refreshes == restart + 1 && app->ui.screen == McScreenPlaying);
+    assert(app->ui.hud_valid && app->ui.cached_score == app->ui.game.score);
+    // Simulation and completed run loads still publish their own prepared values.
+    app->ui.countdown_ticks = 0;
+    const unsigned simulation = mc_host_render_refreshes;
+    mc_app_step(app);
+    assert(mc_host_render_refreshes == simulation + 1);
+    McIoJob job = {0};
+    job.data.run.game = app->ui.game;
+    const unsigned loaded = mc_host_render_refreshes;
+    mc_app_publish_run(app, &job);
+    assert(mc_host_render_refreshes == loaded + 1);
+    assert(app->ui.cached_score == app->ui.game.score);
+    // An overflow arriving after dequeue invalidates even the already fetched event.
+    app->ui.screen = McScreenPlaying;
+    const uint32_t game_before = mc_game_state_hash(&app->ui.game);
+    event = (InputEvent){.key = InputKeyOk, .type = InputTypeShort};
+    for(unsigned n = 0; n <= MC_INPUT_QUEUE_CAPACITY; n++)
+        callback(app, InputKeyOk, InputTypePress, n);
+    mc_app_process_input_batch(app, &event);
+    assert(app->ui.screen == McScreenPaused && app->ui.input_recovery == McInputRecoveryHeld);
+    assert(mc_game_state_hash(&app->ui.game) == game_before);
+    printf("Input cache refreshes: 8 -> 1 per full batch\n");
+    mc_app_free(app);
+}
+
+static void test_menu_snapshot_copy(void) {
+    host_reset();
+    McApp* app = test_app_alloc();
+    mc_game_start_run(&app->ui.game, McDifficultyCommand, 42);
+    mc_game_fire(&app->ui.game);
+    mc_app_refresh_render_cache(app);
+    size_t menu_bytes = 0, playing_bytes = 0;
+    for(McScreen screen = McScreenTitle; screen <= McScreenExiting; screen++) {
+        app->ui.screen = screen;
+        McRenderSnapshot reference, snapshot;
+        memset(&snapshot, 0xA5, sizeof(snapshot));
+        // Original full-copy algorithm is the pixel baseline for every screen.
+        reference.common = app->ui.common;
+        reference.game = app->ui.game;
+        if(screen != McScreenPlaying) {
+            reference.scores = app->ui.scores;
+            reference.profile = app->ui.profile;
+        }
+        mc_render_snapshot(&snapshot, &app->ui);
+        if(screen == McScreenPlaying)
+            playing_bytes = mc_host_snapshot_bytes;
+        else
+            menu_bytes = mc_host_snapshot_bytes;
+        Canvas expected = {0}, actual = {0};
+        mc_render(&expected, &reference);
+        mc_render(&actual, &snapshot);
+        assert(!memcmp(expected.pixels, actual.pixels, sizeof(expected.pixels)));
+        const McUiModel saved = app->ui;
+        memset(&app->ui, 0, sizeof(app->ui));
+        mc_render(&actual, &snapshot);
+        assert(!memcmp(expected.pixels, actual.pixels, sizeof(expected.pixels)));
+        app->ui = saved;
+    }
+    const size_t previous_menu = playing_bytes + sizeof(McScoreTables) + sizeof(McProfile);
+    assert(menu_bytes < playing_bytes && previous_menu - menu_bytes == offsetof(McGame, stats));
+    printf(
+        "Snapshot bytes: menus %zu -> %zu; gameplay %zu unchanged\n",
+        previous_menu,
+        menu_bytes,
+        playing_bytes);
+    mc_app_free(app);
+}
+
 static McApp* render_app;
 static void mutate_after_snapshot(void) {
     furi_mutex_acquire(render_app->mutex, FuriWaitForever);
@@ -1356,6 +1534,9 @@ int main(void) {
     test_help_coordination();
     test_input_fifo_and_overflow();
     test_callback_battery_gestures();
+    test_input_recovery_pause();
+    test_input_batch_render_cache();
+    test_menu_snapshot_copy();
     test_render_snapshot_consistency();
     test_inverted_frames_and_overlays();
     test_invert_setting_survives_restart();

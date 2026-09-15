@@ -6,6 +6,12 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PROMPT = '>: ';
 const APP_TARGET = '/ext/apps/Games/missile_cmd.fap';
+const DATA_ROOT = '/ext/apps_data/missile_cmd';
+
+function versionFolder(name) {
+    if (/^v[0-9]+$/.test(name)) return true;
+    try { helpTarget(name); return true; } catch { return false; }
+}
 
 function checkResponse(text, allowed = []) {
     const error = /Storage error:\s*([^\r\n]+)/i.exec(text);
@@ -44,6 +50,8 @@ export class FlipperSerial {
         this.waiter = null;
         this.failure = null;
         this.closing = false;
+        this.recovery = [];
+        this.recoveryChecked = false;
     }
 
     async open() {
@@ -59,6 +67,7 @@ export class FlipperSerial {
         // Missing/unusable SD cards fail before any write.
         const storage = await this.command('storage stat "/ext"');
         if (!/Storage,/.test(storage)) throw new Error('Insert a working microSD card into your Flipper.');
+        await this.inspectRecovery();
         return this.device;
     }
 
@@ -147,14 +156,76 @@ export class FlipperSerial {
         await this.command(`storage rename "${from}" "${to}"`);
     }
 
+    async fingerprint(path, name) {
+        const stat = await this.command(`storage stat "${path}"`);
+        const size = Number(/(?:^|\n)File, size:\s*(\d+)b\r?(?:\n|$)/.exec(stat)?.[1]);
+        if (!Number.isSafeInteger(size) || size < 0) {
+            throw new Error(`Cannot verify the backup for ${name}. Check the microSD card and reconnect.`);
+        }
+        const response = await this.command(`storage md5 "${path}"`);
+        const md5 = response.split(/\r?\n/).find((line) => /^[a-f0-9]{32}$/i.test(line.trim()))?.trim().toLowerCase();
+        if (!md5) {
+            throw new Error(`Cannot verify the backup for ${name}. Check the microSD card and reconnect.`);
+        }
+        return { name, size, md5 };
+    }
+
+    async inspectRecovery() {
+        this.recoveryChecked = false;
+        const candidates = [{ target: APP_TARGET, name: 'Missile CMD app' }];
+        const listing = await this.command(`storage list "${DATA_ROOT}"`, ['file/dir not exist']);
+        for (const match of listing.matchAll(/^\s*\[D\] ([^\r\n]+)\r?$/gm)) {
+            const version = match[1];
+            if (versionFolder(version)) candidates.push({ target: `${DATA_ROOT}/${version}/help.bin`, name: `Help — ${version}` });
+        }
+        const found = [];
+        for (const entry of candidates) {
+            const backup = entry.target + '.web-backup';
+            if (await this.exists(backup)) {
+                found.push({ ...entry, backup, staged: entry.target + '.web-restore',
+                    ...await this.fingerprint(backup, entry.name) });
+            }
+        }
+        this.recovery = found;
+        this.recoveryChecked = true;
+        return found;
+    }
+
+    async restoreBackups(progress = () => { }) {
+        const approved = this.recovery;
+        const entries = await this.inspectRecovery();
+        const same = (a, b) => a.target === b.target && a.size === b.size && a.md5 === b.md5;
+        if (!approved.length || entries.length !== approved.length ||
+            entries.some((entry) => !approved.some((prior) => same(entry, prior)))) {
+            throw new Error('Backup files changed. Reconnect and review the recovery list again.');
+        }
+        // Stage every original before touching installed files. Backups remain available
+        // through copy, replacement, verification, and any interrupted retry.
+        for (const entry of entries) {
+            progress(`Restoring ${entry.name}…`);
+            await this.remove(entry.staged);
+            await this.command(`storage copy "${entry.backup}" "${entry.staged}"`);
+            await this.verify(entry.staged, entry);
+        }
+        for (const entry of entries) {
+            await this.remove(entry.target);
+            await this.rename(entry.staged, entry.target);
+        }
+        for (const entry of entries) await this.verify(entry.target, entry);
+        for (const entry of entries) await this.remove(entry.backup);
+        await this.inspectRecovery();
+        if (this.recovery.length) throw new Error('More backups were found. Reconnect and review them before installing.');
+        return { status: 'restored' };
+    }
+
     async verify(path, file) {
         const stat = await this.command(`storage stat "${path}"`);
         if (Number(/File, size:\s*(\d+)b/.exec(stat)?.[1]) !== file.size) {
-            throw new Error(`File size check failed for ${file.name}. Retry the installation.`);
+            throw new Error(`File size check failed for ${file.name}. Reconnect and retry.`);
         }
         const hash = await this.command(`storage md5 "${path}"`);
         if (!hash.split(/\r?\n/).some((line) => line.trim().toLowerCase() === file.md5)) {
-            throw new Error(`File checksum check failed for ${file.name}. Retry the installation.`);
+            throw new Error(`File checksum check failed for ${file.name}. Reconnect and retry.`);
         }
     }
 
@@ -184,6 +255,10 @@ export class FlipperSerial {
                 f.data.length !== f.size || !/^[a-f0-9]{32}$/.test(f.md5))) {
             throw new Error('Invalid installation file set.');
         }
+        // Check all release folders again before writes, even for an app-only install.
+        if ((await this.inspectRecovery()).length) {
+            throw new Error('An interrupted installation needs recovery. Reconnect and choose Restore backups before installing.');
+        }
         const directories = new Set();
         for (const file of files) {
             const parts = file.target.split('/').slice(2, -1);
@@ -200,12 +275,6 @@ export class FlipperSerial {
             file, staged: file.target + '.web-install',
             backup: file.target + '.web-backup', backedUp: false, installed: false
         }));
-        // Preserve recoverable originals from a previous interrupted commit.
-        for (const entry of entries) {
-            if (await this.exists(entry.backup)) {
-                throw new Error('An interrupted installation left a .web-backup file. Use qFlipper to restore it to its original name (or keep a copy and remove the backup), then retry.');
-            }
-        }
         // Both downloads are already SHA-256 verified. Stage AND verify both before
         // touching either installed file. Saves/settings are never addressed.
         for (const entry of entries) {
@@ -231,14 +300,19 @@ export class FlipperSerial {
                         if (entry.backedUp) await this.rename(entry.backup, entry.file.target);
                     }
                 } catch {
-                    throw new Error('Installation interrupted. Original files are kept as .web-backup beside the app/help. Restore them with qFlipper before retrying.');
+                    throw new Error('Installation interrupted. Reconnect and choose Restore backups to recover the original files.');
                 }
             }
-            throw new Error(`${error.message} If .web-backup files remain, restore them with qFlipper before retrying.`);
+            throw new Error(`${error.message} Reconnect to check for backups before retrying.`);
         }
+        const cleanupWarnings = [];
         for (const entry of entries) {
-            if (entry.backedUp) await this.remove(entry.backup);
+            if (entry.backedUp) {
+                try { await this.remove(entry.backup); }
+                catch { cleanupWarnings.push(entry.file.name); }
+            }
         }
+        return { status: cleanupWarnings.length ? 'installed-with-cleanup-warnings' : 'installed', cleanupWarnings };
     }
 
     async close() {

@@ -48,6 +48,9 @@ A missile-defense arcade game for Flipper Zero.
 | Back | Pause during a wave; return or continue elsewhere. |
 | Long Back | Save-and-return confirmation, or end a Practice/Two players session. |
 
+If “Input interrupted” appears, release all buttons, then press OK to resume.
+The usual resume countdown still applies.
+
 ## Gameplay readouts
 
 Example: `W10 012450 H25000 A09` above the playfield, `T24 L10 C9 R9` below.
@@ -108,8 +111,8 @@ The installer checks the app and matching help file before finishing. Older app-
 releases remain available; check compatibility yourself if their firmware version is
 unrecorded. Detected firmware-family or API-major mismatches block installation.
 
-If an interrupted install leaves `.web-backup` files beside the app or help file,
-keep a local copy, then use qFlipper to restore each backup to its original name and retry.
+If an installation is interrupted, reconnect and choose **Restore backups** when
+prompted. After recovery, reconnect and start a new installation.
 
 ### Manual installation
 

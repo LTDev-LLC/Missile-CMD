@@ -188,6 +188,11 @@ static void mc_handle_playing_input(McApp* app, const InputEvent* event) {
 }
 
 static __attribute__((noinline)) void mc_handle_paused_input(McApp* app, const InputEvent* event) {
+    if(app->ui.input_recovery != McInputRecoveryNone) {
+        if(app->ui.input_recovery == McInputRecoveryReady && mc_is_confirm_event(event))
+            mc_app_continue(app);
+        return;
+    }
     if(mc_is_direction_event(event)) {
         mc_move_menu(app, event, McMenuPause);
     } else if(mc_is_confirm_event(event)) {
@@ -928,5 +933,6 @@ void mc_app_handle_input(McApp* app, const InputEvent* event) {
     // Every entry into play, including cancelled dialogs and new waves, gets ready time.
     if(previous_screen != McScreenPlaying && app->ui.screen == McScreenPlaying)
         mc_app_continue(app);
+    if(app->ui.screen == McScreenTitle) app->ui.input_recovery = McInputRecoveryNone;
     mc_help_refresh(&app->ui.common, &app->ui.game);
 }

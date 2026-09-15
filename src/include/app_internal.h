@@ -79,6 +79,7 @@ typedef struct {
     bool run_dirty;
     bool save_title_on_success;
     bool running;
+    bool input_batch;
 } McApp;
 
 // The worker mailbox is inline in McApp. Reserve 1 KiB for the 32-event queue,

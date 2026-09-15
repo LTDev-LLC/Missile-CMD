@@ -185,6 +185,11 @@ static void capture_gameplay(const char* output) {
     prepare_gameplay(&app, McModeClassic, 10U);
     capture(output, "gameplay", &app, McScreenPlaying);
     capture(output, "paused", &app, McScreenPaused);
+    app.ui.input_recovery = McInputRecoveryHeld;
+    capture(output, "input_interrupted", &app, McScreenPaused);
+    app.ui.input_recovery = McInputRecoveryReady;
+    capture(output, "input_resume", &app, McScreenPaused);
+    app.ui.input_recovery = McInputRecoveryNone;
     app.ui.settings.simple_hud = true;
     capture(output, "simple_hud", &app, McScreenPlaying);
     app.ui.settings.simple_hud = false;

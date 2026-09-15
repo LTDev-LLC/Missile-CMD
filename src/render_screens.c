@@ -897,6 +897,17 @@ void mc_render_screen(Canvas* canvas, const McRenderSnapshot* model) {
         mc_draw_hud_guide(canvas, model);
         break;
     case McScreenPaused:
+        if(model->input_recovery != McInputRecoveryNone) {
+            mc_render_heading(canvas, 1, "PAUSED");
+            canvas_set_font(canvas, FontSecondary);
+            mc_render_centered(canvas, 24, "Input interrupted");
+            mc_render_centered(
+                canvas,
+                42,
+                model->input_recovery == McInputRecoveryHeld ? "Release all buttons" :
+                                                               "OK to resume");
+            break;
+        }
         mc_draw_menu(canvas, model, McMenuPause, "PAUSED");
         {
             char seed[32];
